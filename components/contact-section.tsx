@@ -17,7 +17,7 @@ const contactInfo = [
     icon: MessageCircle,
     label: "Message Us",
     value: "09507586561",
-    desc: "Chat with us on Viber",
+    desc: "Leave a message",
     isMessenger: true,
   },
 
@@ -166,7 +166,7 @@ export function ContactSection() {
                       </a>
                     ) : item.isMessenger ? (
                       <a
-                        href={`viber://chat?number=%2B639507586561`}
+                        href={`sms:+639507586561`}
                         className="text-lg font-bold text-primary hover:text-primary/80 transition-colors"
                       >
                         {item.value}
