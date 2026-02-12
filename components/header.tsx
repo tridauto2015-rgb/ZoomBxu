@@ -21,37 +21,59 @@ export function Header() {
     const targetId = href.replace('#', '')
     const element = document.getElementById(targetId)
     
-    if (element) {
-      const headerHeight = 80 // Approximate header height
-      const startPosition = window.pageYOffset
-      const targetPosition = element.offsetTop - headerHeight
-      const distance = targetPosition - startPosition
-      const duration = 1500 // 1.5 seconds for smooth animation
-      
-      let start: number | null = null
-      
-      const animation = (currentTime: number) => {
-        if (start === null) start = currentTime
-        const timeElapsed = currentTime - start
-        const progress = Math.min(timeElapsed / duration, 1)
-        
-        // Easing function for smooth acceleration and deceleration
-        const easeInOutCubic = progress < 0.5
-          ? 4 * progress * progress * progress
-          : 1 - Math.pow(-2 * progress + 2, 3) / 2
-        
-        window.scrollTo(0, startPosition + (distance * easeInOutCubic))
-        
-        if (timeElapsed < duration) {
-          requestAnimationFrame(animation)
-        }
-      }
-      
-      requestAnimationFrame(animation)
-    }
-    
-    // Close mobile menu
+    // Close mobile menu first
     setMobileOpen(false)
+    
+    if (element) {
+      // Check if mobile and use appropriate scrolling method
+      if (window.innerWidth < 768) {
+        // Mobile: Use immediate scroll with fallback
+        const headerHeight = 64 // Mobile header height
+        const targetPosition = element.offsetTop - headerHeight
+        
+        // Small delay to ensure mobile menu is closed
+        setTimeout(() => {
+          if ('scrollBehavior' in document.documentElement.style) {
+            // Modern mobile browsers - use CSS smooth scroll
+            window.scrollTo({
+              top: targetPosition,
+              behavior: 'smooth'
+            })
+          } else {
+            // Older mobile browsers - immediate scroll
+            window.scrollTo(0, targetPosition)
+          }
+        }, 150) // Delay for mobile menu closure
+      } else {
+        // Desktop: Keep original elegant animation
+        const headerHeight = 80 // Desktop header height
+        const startPosition = window.pageYOffset
+        const targetPosition = element.offsetTop - headerHeight
+        const distance = targetPosition - startPosition
+        const duration = 1500 // 1.5 seconds for desktop
+        
+        let start: number | null = null
+        
+        const animation = (currentTime: number) => {
+          if (start === null) start = currentTime
+          const timeElapsed = currentTime - start
+          const progress = Math.min(timeElapsed / duration, 1)
+          
+          // Easing function for smooth acceleration and deceleration
+          const easeInOutCubic = progress < 0.5
+            ? 4 * progress * progress * progress
+            : 1 - Math.pow(-2 * progress + 2, 3) / 2
+          
+          window.scrollTo(0, startPosition + (distance * easeInOutCubic))
+          
+          if (timeElapsed < duration) {
+            requestAnimationFrame(animation)
+          }
+        }
+        
+        requestAnimationFrame(animation)
+      }
+    }
   }
 
   return (
