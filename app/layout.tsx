@@ -31,6 +31,28 @@ export const metadata: Metadata = {
     shortcut: '/images/zoombxulogo.png',
     apple: '/images/zoombxulogo.png',
   },
+  openGraph: {
+    title: 'Zoom BXU Auto Parts - Quality Parts You Can Trust',
+    description: 'Your trusted source for quality auto parts. Easy to browse, easy to order. Serving car enthusiasts and everyday drivers since 1985.',
+    url: 'https://zoombxusurplus.vercel.app',
+    siteName: 'Zoom BXU Auto Parts',
+    images: [
+      {
+        url: '/images/zoombxu.png',
+        width: 1200,
+        height: 630,
+        alt: 'Zoom BXU Auto Parts Logo',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Zoom BXU Auto Parts - Quality Parts You Can Trust',
+    description: 'Your trusted source for quality auto parts. Easy to browse, easy to order. Serving car enthusiasts and everyday drivers since 1985.',
+    images: ['/images/zoombxu.png'],
+  },
 }
 
 export const viewport: Viewport = {
