@@ -64,9 +64,7 @@ export function AdminLogin() {
           </button>
         </form>
         
-        <div className="text-center text-sm text-muted-foreground">
-          Default password: <code className="bg-muted px-2 py-1 rounded">31223</code>
-        </div>
+
       </div>
     </div>
   )
