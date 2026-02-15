@@ -6,18 +6,19 @@ import './globals.css'
 import { AdminProvider } from "@/contexts/admin-context"
 import { ProductsProvider } from "@/contexts/products-context"
 import { CartProvider } from "@/contexts/cart-context"
+import { Toaster } from "@/components/ui/sonner"
 
-const inter = Inter({ 
+const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
 })
 
-const playfair = Playfair_Display({ 
+const playfair = Playfair_Display({
   subsets: ['latin'],
   variable: '--font-playfair',
 })
 
-const russoOne = Russo_One({ 
+const russoOne = Russo_One({
   subsets: ['latin'],
   weight: '400',
   variable: '--font-russo-one',
@@ -78,6 +79,7 @@ export default function RootLayout({
           <ProductsProvider>
             <CartProvider>
               {children}
+              <Toaster />
             </CartProvider>
           </ProductsProvider>
         </AdminProvider>

@@ -5,6 +5,7 @@ import Image from "next/image"
 import { Menu, X, Phone } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAdmin } from "@/contexts/admin-context"
+import { Cart } from "./cart"
 
 const navLinks = [
   { label: "Home", href: "#home" },
@@ -20,17 +21,17 @@ export function Header() {
     e.preventDefault()
     const targetId = href.replace('#', '')
     const element = document.getElementById(targetId)
-    
+
     // Close mobile menu first
     setMobileOpen(false)
-    
+
     if (element) {
       // Check if mobile and use appropriate scrolling method
       if (window.innerWidth < 768) {
         // Mobile: Use immediate scroll with fallback
         const headerHeight = 64 // Mobile header height
         const targetPosition = element.offsetTop - headerHeight
-        
+
         // Small delay to ensure mobile menu is closed
         setTimeout(() => {
           if ('scrollBehavior' in document.documentElement.style) {
@@ -51,26 +52,26 @@ export function Header() {
         const targetPosition = element.offsetTop - headerHeight
         const distance = targetPosition - startPosition
         const duration = 1500 // 1.5 seconds for desktop
-        
+
         let start: number | null = null
-        
+
         const animation = (currentTime: number) => {
           if (start === null) start = currentTime
           const timeElapsed = currentTime - start
           const progress = Math.min(timeElapsed / duration, 1)
-          
+
           // Easing function for smooth acceleration and deceleration
           const easeInOutCubic = progress < 0.5
             ? 4 * progress * progress * progress
             : 1 - Math.pow(-2 * progress + 2, 3) / 2
-          
+
           window.scrollTo(0, startPosition + (distance * easeInOutCubic))
-          
+
           if (timeElapsed < duration) {
             requestAnimationFrame(animation)
           }
         }
-        
+
         requestAnimationFrame(animation)
       }
     }
@@ -82,8 +83,8 @@ export function Header() {
       <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           {/* Logo */}
-          <a 
-            href="#home" 
+          <a
+            href="#home"
             onClick={(e) => handleSmoothScroll(e, "#home")}
             className="flex items-center gap-3"
           >
@@ -96,7 +97,7 @@ export function Header() {
                 sizes="(max-width: 768px) 80px, 80px"
               />
             </div>
-            
+
           </a>
 
           {/* Desktop nav */}
@@ -115,6 +116,7 @@ export function Header() {
 
           {/* Actions */}
           <div className="flex items-center gap-4">
+            <Cart />
             <button
               type="button"
               onClick={() => setMobileOpen(!mobileOpen)}

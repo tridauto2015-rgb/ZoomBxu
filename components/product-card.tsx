@@ -5,6 +5,7 @@ import Image from "next/image"
 import { ShoppingCart, Eye, Star, Check } from "lucide-react"
 import { ProductImageCarousel } from "./product-image-carousel"
 import { useCart } from "@/contexts/cart-context"
+import { toast } from "sonner"
 
 export interface Product {
   id: number
@@ -26,6 +27,15 @@ interface ProductCardProps {
 export function ProductCard({ product, index }: { product: Product; index: number }) {
   const [carouselOpen, setCarouselOpen] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
+  const { addToCart } = useCart()
+
+  const handleAddToCart = () => {
+    addToCart(product)
+    toast.success(`${product.name} added to cart!`, {
+      description: "You can view your items in the cart.",
+      duration: 3000,
+    })
+  }
 
   return (
     <>
@@ -41,9 +51,8 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
             src={product.images[0] || "/placeholder.svg"}
             alt={product.name}
             fill
-            className={`object-cover transition-transform duration-700 ${
-              isHovered ? "scale-110" : "scale-100"
-            }`}
+            className={`object-cover transition-transform duration-700 ${isHovered ? "scale-110" : "scale-100"
+              }`}
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           />
 
@@ -58,9 +67,8 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
 
           {/* Hover overlay with view button */}
           <div
-            className={`absolute inset-0 flex items-center justify-center bg-foreground/30 transition-opacity duration-300 ${
-              isHovered ? "opacity-100" : "opacity-0"
-            }`}
+            className={`absolute inset-0 flex items-center justify-center bg-foreground/30 transition-opacity duration-300 ${isHovered ? "opacity-100" : "opacity-0"
+              }`}
           >
             <button
               type="button"
@@ -86,11 +94,10 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
               {Array.from({ length: 5 }).map((_, i) => (
                 <Star
                   key={i}
-                  className={`h-5 w-5 ${
-                    i < Math.floor(product.rating)
-                      ? "fill-primary text-primary"
-                      : "fill-muted text-muted"
-                  }`}
+                  className={`h-5 w-5 ${i < Math.floor(product.rating)
+                    ? "fill-primary text-primary"
+                    : "fill-muted text-muted"
+                    }`}
                 />
               ))}
             </div>
@@ -100,17 +107,27 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
           </div>
 
           {/* Price and CTA */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-foreground">
-                {product.price}
-              </span>
-              {product.originalPrice && (
-                <span className="text-lg text-muted-foreground line-through">
-                  {product.originalPrice}
+          <div className="mt-auto flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-foreground">
+                  {product.price}
                 </span>
-              )}
+                {product.originalPrice && (
+                  <span className="text-lg text-muted-foreground line-through">
+                    {product.originalPrice}
+                  </span>
+                )}
+              </div>
             </div>
+
+            <button
+              onClick={handleAddToCart}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-lg font-bold text-primary-foreground transition-all duration-300 hover:bg-primary/90 hover:shadow-lg active:scale-95"
+            >
+              <ShoppingCart className="h-5 w-5" />
+              Add to Cart
+            </button>
           </div>
         </div>
       </article>
