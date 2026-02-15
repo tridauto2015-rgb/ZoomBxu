@@ -5,6 +5,8 @@ import Image from "next/image"
 import { ShoppingCart, Eye, Star, Check } from "lucide-react"
 import { ProductImageCarousel } from "./product-image-carousel"
 import { useCart } from "@/contexts/cart-context"
+import { useAuth } from "@/contexts/auth-context"
+import { AuthModal } from "./auth-modal"
 import { toast } from "sonner"
 
 export interface Product {
@@ -27,9 +29,16 @@ interface ProductCardProps {
 export function ProductCard({ product, index }: { product: Product; index: number }) {
   const [carouselOpen, setCarouselOpen] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
+  const [authModalOpen, setAuthModalOpen] = useState(false)
   const { addToCart } = useCart()
+  const { isAuthenticated } = useAuth()
 
   const handleAddToCart = () => {
+    if (!isAuthenticated) {
+      setAuthModalOpen(true)
+      return
+    }
+
     addToCart(product)
     toast.success(`${product.name} added to cart!`, {
       description: "You can view your items in the cart.",
@@ -39,6 +48,14 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
 
   return (
     <>
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onSuccess={() => {
+          addToCart(product)
+          toast.success(`${product.name} added to cart!`)
+        }}
+      />
       <article
         className="group animate-fade-in-up overflow-hidden rounded-2xl border border-border bg-card transition-all duration-500 hover:shadow-xl hover:-translate-y-1"
         style={{ animationDelay: `${index * 100}ms`, animationFillMode: "both" }}

@@ -6,6 +6,7 @@ import './globals.css'
 import { AdminProvider } from "@/contexts/admin-context"
 import { ProductsProvider } from "@/contexts/products-context"
 import { CartProvider } from "@/contexts/cart-context"
+import { AuthProvider } from "@/contexts/auth-context"
 import { Toaster } from "@/components/ui/sonner"
 
 const inter = Inter({
@@ -75,14 +76,16 @@ export default function RootLayout({
         <link rel="apple-touch-icon" sizes="180x180" href="/images/zoombxulogo.png" />
       </head>
       <body className="font-sans antialiased">
-        <AdminProvider>
-          <ProductsProvider>
-            <CartProvider>
-              {children}
-              <Toaster />
-            </CartProvider>
-          </ProductsProvider>
-        </AdminProvider>
+        <AuthProvider>
+          <AdminProvider>
+            <ProductsProvider>
+              <CartProvider>
+                {children}
+                <Toaster />
+              </CartProvider>
+            </ProductsProvider>
+          </AdminProvider>
+        </AuthProvider>
       </body>
     </html>
   )
