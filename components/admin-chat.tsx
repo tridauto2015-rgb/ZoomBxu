@@ -45,7 +45,7 @@ export function AdminChat() {
                 event: 'INSERT',
                 schema: 'public',
                 table: 'messages'
-            }, (payload) => {
+            }, (payload: any) => {
                 const msg = payload.new as Message
                 fetchSessions() // Refresh sessions list
 
