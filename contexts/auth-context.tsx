@@ -4,12 +4,12 @@ import { createContext, useContext, useState, useEffect, ReactNode } from "react
 
 interface User {
     name: string
-    email: string
+    phone: string
 }
 
 interface AuthContextType {
     user: User | null
-    login: (name: string, email: string) => void
+    login: (name: string, phone: string) => void
     logout: () => void
     isAuthenticated: boolean
 }
@@ -26,8 +26,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, [])
 
-    const login = (name: string, email: string) => {
-        const newUser = { name, email }
+    const login = (name: string, phone: string) => {
+        const newUser = { name, phone }
         setUser(newUser)
         localStorage.setItem("user", JSON.stringify(newUser))
     }

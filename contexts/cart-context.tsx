@@ -30,6 +30,7 @@ export function useCart() {
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([])
 
+  // Load from localStorage only on mount
   useEffect(() => {
     const stored = localStorage.getItem("cart")
     if (stored) {
@@ -41,36 +42,31 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const saveCart = (newCart: CartItem[]) => {
-    setCart(newCart)
-    localStorage.setItem("cart", JSON.stringify(newCart))
-  }
+  // Save to localStorage whenever cart changes
+  useEffect(() => {
+    localStorage.setItem("cart", JSON.stringify(cart))
+  }, [cart])
 
   const addToCart = (product: Product) => {
     setCart(currentCart => {
       const existingItem = currentCart.find(item => item.id === product.id)
-      
+
       if (existingItem) {
         // Update quantity if item already exists
-        const updatedCart = currentCart.map(item =>
+        return currentCart.map(item =>
           item.id === product.id
             ? { ...item, quantity: item.quantity + 1 }
             : item
         )
-        saveCart(updatedCart)
-        return updatedCart
       } else {
         // Add new item with quantity 1
-        const newCart = [...currentCart, { ...product, quantity: 1 }]
-        saveCart(newCart)
-        return newCart
+        return [...currentCart, { ...product, quantity: 1 }]
       }
     })
   }
 
   const removeFromCart = (productId: number) => {
-    const newCart = cart.filter(item => item.id !== productId)
-    saveCart(newCart)
+    setCart(currentCart => currentCart.filter(item => item.id !== productId))
   }
 
   const updateQuantity = (productId: number, quantity: number) => {
@@ -79,16 +75,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const newCart = cart.map(item =>
+    setCart(currentCart => currentCart.map(item =>
       item.id === productId
         ? { ...item, quantity }
         : item
-    )
-    saveCart(newCart)
+    ))
   }
 
   const clearCart = () => {
-    saveCart([])
+    setCart([])
   }
 
   const getCartTotal = () => {
