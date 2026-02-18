@@ -5,7 +5,12 @@ import Image from "next/image"
 import { Menu, X, Phone } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAdmin } from "@/contexts/admin-context"
+import { useAuth } from "@/contexts/auth-context"
 import { Cart } from "./cart"
+import { UserOrders } from "./user-orders"
+import { AuthModal } from "./auth-modal"
+import { LogOut, User as UserIcon, LogIn } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 const navLinks = [
   { label: "Home", href: "#home" },
@@ -15,7 +20,9 @@ const navLinks = [
 
 export function Header() {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [authModalOpen, setAuthModalOpen] = useState(false)
   const { isAdmin } = useAdmin()
+  const { user, isAuthenticated, logout } = useAuth()
 
   const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault()
@@ -116,7 +123,42 @@ export function Header() {
 
           {/* Actions */}
           <div className="flex items-center gap-4">
-            <Cart />
+            {isAuthenticated ? (
+              <div className="hidden lg:flex items-center gap-4">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-xl border border-border">
+                  <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
+                    <UserIcon className="h-3.5 w-3.5 text-primary" />
+                  </div>
+                  <span className="text-sm font-bold">{user?.name.split(' ')[0]}</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={logout}
+                  className="text-muted-foreground hover:bg-muted hover:text-destructive gap-2 font-bold"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sign Out
+                </Button>
+              </div>
+            ) : (
+              <Button
+                onClick={() => setAuthModalOpen(true)}
+                className="hidden lg:flex gap-2 font-bold px-6"
+                size="sm"
+              >
+                <LogIn className="h-4 w-4" />
+                Sign In
+              </Button>
+            )}
+
+            <div className="flex items-center gap-3">
+              <UserOrders />
+              <div className="cart-container">
+                <Cart />
+              </div>
+            </div>
+
             <button
               type="button"
               onClick={() => setMobileOpen(!mobileOpen)}
@@ -133,10 +175,10 @@ export function Header() {
         <div
           className={cn(
             "overflow-hidden transition-all duration-500 ease-in-out lg:hidden",
-            mobileOpen ? "max-h-[400px] opacity-100" : "max-h-0 opacity-0"
+            mobileOpen ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
           )}
         >
-          <nav className="border-t border-border px-6 py-4" aria-label="Mobile navigation">
+          <nav className="border-t border-border px-6 py-4 space-y-2" aria-label="Mobile navigation">
             {navLinks.map((link) => (
               <a
                 key={link.label}
@@ -150,9 +192,46 @@ export function Header() {
                 {link.label}
               </a>
             ))}
+
+            <div className="pt-4 border-t border-border mt-4">
+              {isAuthenticated ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-muted rounded-xl">
+                    <UserIcon className="h-5 w-5 text-primary" />
+                    <span className="font-bold text-lg">{user?.name}</span>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    className="w-full py-6 font-bold text-lg rounded-xl"
+                    onClick={() => {
+                      logout()
+                      setMobileOpen(false)
+                    }}
+                  >
+                    <LogOut className="mr-2 h-5 w-5" />
+                    Sign Out
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  className="w-full py-6 font-bold text-lg rounded-xl"
+                  onClick={() => {
+                    setAuthModalOpen(true)
+                    setMobileOpen(false)
+                  }}
+                >
+                  <LogIn className="mr-2 h-5 w-5" />
+                  Sign In
+                </Button>
+              )}
+            </div>
           </nav>
         </div>
       </header>
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+      />
     </>
   )
 }

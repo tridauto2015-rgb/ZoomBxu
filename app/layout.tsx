@@ -8,6 +8,7 @@ import { ProductsProvider } from "@/contexts/products-context"
 import { CartProvider } from "@/contexts/cart-context"
 import { AuthProvider } from "@/contexts/auth-context"
 import { Toaster } from "@/components/ui/sonner"
+import { ChatBox } from "@/components/chat-box"
 
 const inter = Inter({
   subsets: ['latin'],
@@ -81,6 +82,7 @@ export default function RootLayout({
             <ProductsProvider>
               <CartProvider>
                 {children}
+                <ChatBox />
                 <Toaster />
               </CartProvider>
             </ProductsProvider>

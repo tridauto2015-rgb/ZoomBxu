@@ -26,7 +26,7 @@ export function AdminLogin() {
           <h1 className="text-3xl font-bold text-foreground">Admin Login</h1>
           <p className="mt-2 text-muted-foreground">Enter password to access admin panel</p>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-foreground mb-2">
@@ -53,7 +53,9 @@ export function AdminLogin() {
           </div>
 
           {error && (
-            <div className="text-red-500 text-sm text-center">{error}</div>
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm font-bold text-center animate-in fade-in zoom-in duration-200">
+              {error}
+            </div>
           )}
 
           <button
@@ -63,7 +65,7 @@ export function AdminLogin() {
             Login
           </button>
         </form>
-        
+
 
       </div>
     </div>

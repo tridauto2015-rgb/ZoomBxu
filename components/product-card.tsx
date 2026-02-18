@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import Image from "next/image"
 import { ShoppingCart, Eye, Star, Check } from "lucide-react"
 import { ProductImageCarousel } from "./product-image-carousel"
@@ -8,6 +8,8 @@ import { useCart } from "@/contexts/cart-context"
 import { useAuth } from "@/contexts/auth-context"
 import { AuthModal } from "./auth-modal"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
+import gsap from "gsap"
 
 export interface Product {
   id: number
@@ -30,6 +32,9 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
   const [carouselOpen, setCarouselOpen] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
   const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [isAdding, setIsAdding] = useState(false)
+  const [showFlyer, setShowFlyer] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
   const { addToCart } = useCart()
   const { isAuthenticated } = useAuth()
 
@@ -39,11 +44,57 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
       return
     }
 
+    setIsAdding(true)
+    setShowFlyer(true)
     addToCart(product)
-    toast.success(`${product.name} added to cart!`, {
-      description: "You can view your items in the cart.",
-      duration: 3000,
-    })
+
+    // GSAP Fly Animation
+    if (buttonRef.current) {
+      const buttonRect = buttonRef.current.getBoundingClientRect()
+      const cartElement = document.querySelector('.cart-container')
+      const cartRect = cartElement?.getBoundingClientRect()
+
+      if (cartRect) {
+        const flyer = document.createElement('div')
+        flyer.style.position = 'fixed'
+        flyer.style.left = `${buttonRect.left + buttonRect.width / 2 - 20}px`
+        flyer.style.top = `${buttonRect.top + buttonRect.height / 2 - 20}px`
+        flyer.style.width = '40px'
+        flyer.style.height = '40px'
+        flyer.style.backgroundColor = 'hsl(var(--primary))'
+        flyer.style.borderRadius = '50%'
+        flyer.style.zIndex = '9999'
+        flyer.style.pointerEvents = 'none'
+        flyer.style.display = 'flex'
+        flyer.style.alignItems = 'center'
+        flyer.style.justifyContent = 'center'
+        flyer.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.1)'
+        flyer.innerHTML = `<img src="${product.images[0]}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%" />`
+        document.body.appendChild(flyer)
+
+        gsap.to(flyer, {
+          left: cartRect.left + cartRect.width / 2 - 10,
+          top: cartRect.top + cartRect.height / 2 - 10,
+          scale: 0.1,
+          opacity: 0.2,
+          duration: 0.7,
+          ease: "back.in(1.7)",
+          onComplete: () => {
+            document.body.removeChild(flyer)
+            // Slightly delay the cart opening for better feel
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('open-cart'))
+            }, 100)
+          }
+        })
+      }
+    }
+
+    // Reset states after animation
+    setTimeout(() => {
+      setIsAdding(false)
+      setShowFlyer(false)
+    }, 1000)
   }
 
   return (
@@ -53,7 +104,6 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
         onClose={() => setAuthModalOpen(false)}
         onSuccess={() => {
           addToCart(product)
-          toast.success(`${product.name} added to cart!`)
         }}
       />
       <article
@@ -139,11 +189,27 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
             </div>
 
             <button
+              ref={buttonRef}
               onClick={handleAddToCart}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-lg font-bold text-primary-foreground transition-all duration-300 hover:bg-primary/90 hover:shadow-lg active:scale-95"
+              disabled={isAdding}
+              className={cn(
+                "flex w-full items-center justify-center gap-2 rounded-xl py-3 text-lg font-bold transition-all duration-300 active:scale-95",
+                isAdding
+                  ? "bg-green-500 text-white"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-lg"
+              )}
             >
-              <ShoppingCart className="h-5 w-5" />
-              Add to Cart
+              {isAdding ? (
+                <>
+                  <Check className="h-5 w-5 animate-in zoom-in duration-300" />
+                  Added!
+                </>
+              ) : (
+                <>
+                  <ShoppingCart className="h-5 w-5" />
+                  Add to Cart
+                </>
+              )}
             </button>
           </div>
         </div>
