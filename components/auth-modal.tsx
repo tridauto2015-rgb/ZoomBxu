@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { UserPlus, Loader2, ArrowLeft, LogIn, Mail, Lock, Phone } from "lucide-react"
+import { Loader2, ArrowLeft, LogIn, Mail, Lock, Phone, User } from "lucide-react"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabase"
 
@@ -78,7 +78,6 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
 
                 if (data.user) {
                     login(name, phone, email) // Sync with our simple context
-                    toast.success("Account Created Successfully!")
                     onClose()
                     if (onSuccess) onSuccess()
                 }
@@ -127,11 +126,19 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
         <Dialog open={isOpen} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                    <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center">
                         {mode === "signup" ? (
-                            <UserPlus className="h-6 w-6 text-primary" />
+                            <img 
+                                src="/images/zoombxulogocircle.png" 
+                                alt="ZoomBXU Logo" 
+                                className="h-24 w-24 object-contain"
+                            />
                         ) : (
-                            <LogIn className="h-6 w-6 text-primary" />
+                            <img 
+                                src="/images/zoombxulogocircle.png" 
+                                alt="ZoomBXU Logo" 
+                                className="h-24 w-24 object-contain"
+                            />
                         )}
                     </div>
                     <DialogTitle className="text-center text-2xl font-bold">
@@ -159,7 +166,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                                         disabled={isLoading}
                                         className="h-12 pl-10"
                                     />
-                                    <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 </div>
                             </div>
                             <div className="space-y-2">

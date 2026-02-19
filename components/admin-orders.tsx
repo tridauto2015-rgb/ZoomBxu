@@ -2,20 +2,149 @@
 
 import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabase"
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow
-} from "@/components/ui/table"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { ShoppingBag, XCircle, CheckCircle2, Phone, User, Clock, Trash2, Loader2 } from "lucide-react"
+import { ShoppingBag, XCircle, CheckCircle2, Phone, User, Clock, Trash2, Loader2, Zap, PackageCheck, Ban } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+
+// ── Unique admin status toasts ─────────────────────────────────
+function showStatusToast(status: string) {
+    const configs: Record<string, {
+        icon: React.ReactNode
+        title: string
+        description: string
+        accent: string
+        bg: string
+    }> = {
+        processing: {
+            icon: <Zap className="h-5 w-5" style={{ color: '#4f8ef7' }} />,
+            title: 'Now Processing',
+            description: 'This order has been picked up and is being prepared.',
+            accent: '#4f8ef7',
+            bg: 'rgba(79,142,247,0.10)',
+        },
+        completed: {
+            icon: <PackageCheck className="h-5 w-5" style={{ color: '#34d399' }} />,
+            title: 'Order Complete',
+            description: 'Great job! This order has been fulfilled successfully.',
+            accent: '#34d399',
+            bg: 'rgba(52,211,153,0.10)',
+        },
+        cancelled: {
+            icon: <Ban className="h-5 w-5" style={{ color: '#f87171' }} />,
+            title: 'Order Cancelled',
+            description: 'This order has been cancelled and the customer notified.',
+            accent: '#f87171',
+            bg: 'rgba(248,113,113,0.10)',
+        },
+    }
+
+    const c = configs[status]
+    if (!c) return
+
+    toast.custom((t) => (
+        <div
+            style={{
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px',
+                padding: '14px 16px',
+                borderRadius: '12px',
+                background: '#181c27',
+                border: `1px solid ${c.accent}33`,
+                boxShadow: `0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px ${c.accent}22`,
+                minWidth: '300px',
+                maxWidth: '380px',
+                backdropFilter: 'blur(12px)',
+                overflow: 'hidden',
+            }}
+        >
+            {/* Icon */}
+            <div style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                background: c.bg,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                border: `1px solid ${c.accent}30`,
+            }}>
+                {c.icon}
+            </div>
+            {/* Text */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{
+                    fontSize: '0.875rem',
+                    fontWeight: 700,
+                    color: '#e8eaf0',
+                    letterSpacing: '-0.02em',
+                    margin: 0,
+                }}>{c.title}</p>
+                <p style={{
+                    fontSize: '0.775rem',
+                    color: '#8892a4',
+                    marginTop: '3px',
+                    lineHeight: 1.4,
+                }}>{c.description}</p>
+            </div>
+            {/* Dismiss */}
+            <button
+                onClick={() => toast.dismiss(t)}
+                style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#8892a4',
+                    cursor: 'pointer',
+                    fontSize: '1rem',
+                    lineHeight: 1,
+                    padding: '2px',
+                    flexShrink: 0,
+                }}
+                aria-label="Dismiss"
+            >✕</button>
+        </div>
+    ), {
+        duration: 4000,
+        // Strip Sonner's default wrapper entirely
+        className: '!p-0 !bg-transparent !border-none !shadow-none !rounded-none !w-auto',
+        style: { background: 'transparent', border: 'none', boxShadow: 'none', padding: 0 },
+    })
+}
+
+function showDeleteToast() {
+    toast.custom((t) => (
+        <div
+            style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '12px 16px',
+                borderRadius: '12px',
+                background: '#181c27',
+                border: '1px solid rgba(248,113,113,0.2)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                minWidth: '260px',
+                maxWidth: '340px',
+            }}
+        >
+            <Trash2 style={{ color: '#f87171', width: 16, height: 16, flexShrink: 0 }} />
+            <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#e8eaf0', margin: 0, flex: 1 }}>
+                Order record deleted
+            </p>
+            <button
+                onClick={() => toast.dismiss(t)}
+                style={{ background: 'transparent', border: 'none', color: '#8892a4', cursor: 'pointer', fontSize: '0.9rem' }}
+                aria-label="Dismiss"
+            >✕</button>
+        </div>
+    ), {
+        duration: 3000,
+        className: '!p-0 !bg-transparent !border-none !shadow-none !rounded-none !w-auto',
+        style: { background: 'transparent', border: 'none', boxShadow: 'none', padding: 0 },
+    })
+}
 
 interface Order {
     id: string
@@ -33,196 +162,173 @@ export function AdminOrders() {
 
     useEffect(() => {
         fetchOrders()
-
-        // Real-time subscription to order updates
         const channel = supabase
             .channel('orders_channel')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-                fetchOrders()
-            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchOrders)
             .subscribe()
-
-        return () => {
-            supabase.removeChannel(channel)
-        }
+        return () => { supabase.removeChannel(channel) }
     }, [])
 
     const fetchOrders = async () => {
         setIsLoading(true)
-        const { data, error } = await supabase
+        const { data } = await supabase
             .from('orders')
             .select('*')
             .order('created_at', { ascending: false })
-
         if (data) setOrders(data)
         setIsLoading(false)
     }
 
     const updateStatus = async (id: string, newStatus: Order['status']) => {
-        const { error } = await supabase
-            .from('orders')
-            .update({ status: newStatus })
-            .eq('id', id)
-
+        const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', id)
         if (error) {
             toast.error("Failed to update order status")
         } else {
-            const statusMsg = newStatus === 'processing' ? 'Order is now being processed' : `Order marked as ${newStatus}`
-            toast.success(statusMsg)
+            showStatusToast(newStatus)
             fetchOrders()
         }
     }
 
     const deleteOrder = async (id: string) => {
         if (!confirm("Are you sure you want to delete this order record?")) return
-
-        const { error } = await supabase
-            .from('orders')
-            .delete()
-            .eq('id', id)
-
+        const { error } = await supabase.from('orders').delete().eq('id', id)
         if (error) {
             toast.error("Failed to delete order")
         } else {
-            toast.success("Order deleted")
+            showDeleteToast()
             fetchOrders()
         }
     }
 
+    const statusClass = (status: Order['status']) => {
+        if (status === 'pending') return 'ord-status ord-status--pending'
+        if (status === 'processing') return 'ord-status ord-status--processing'
+        if (status === 'completed') return 'ord-status ord-status--completed'
+        return 'ord-status ord-status--cancelled'
+    }
+
     return (
-        <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="flex items-center justify-between border-b border-border pb-4">
+        <div className="ord-wrap">
+            {/* Header */}
+            <div className="ord-header">
                 <div>
-                    <h2 className="text-2xl font-bold flex items-center gap-2">
-                        <ShoppingBag className="h-6 w-6 text-primary" />
+                    <h2 className="ord-title">
+                        <ShoppingBag className="h-5 w-5" />
                         Order Management
                     </h2>
-                    <p className="text-sm text-muted-foreground">View and manage all customer checkout requests.</p>
+                    <p className="ord-subtitle">View and manage all customer checkout requests.</p>
                 </div>
-                <Button variant="outline" size="sm" onClick={fetchOrders} disabled={isLoading}>
-                    <Clock className={cn("mr-2 h-4 w-4", isLoading && "animate-spin")} />
+                <button className="ord-refresh-btn" onClick={fetchOrders} disabled={isLoading}>
+                    <Clock className={cn("h-4 w-4", isLoading && "animate-spin")} />
                     Refresh
-                </Button>
+                </button>
             </div>
 
-            {isLoading && orders.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center">
-                    <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
-                    <p className="font-medium">Loading orders...</p>
+            {/* Loading */}
+            {isLoading && orders.length === 0 && (
+                <div className="ord-empty">
+                    <Loader2 className="h-10 w-10 animate-spin" style={{ color: 'var(--adm-amber)' }} />
+                    <p>Loading orders…</p>
                 </div>
-            ) : orders.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center border-2 border-dashed border-border rounded-2xl bg-muted/20">
-                    <ShoppingBag className="h-12 w-12 text-muted-foreground mb-4" />
-                    <h3 className="text-xl font-bold">No orders yet</h3>
-                    <p className="text-muted-foreground max-w-sm mx-auto">
-                        Customer orders will appear here automatically when they proceed to checkout.
-                    </p>
+            )}
+
+            {/* Empty */}
+            {!isLoading && orders.length === 0 && (
+                <div className="ord-empty">
+                    <ShoppingBag className="h-12 w-12" style={{ color: 'var(--adm-muted)' }} />
+                    <h3 style={{ fontWeight: 700, marginTop: '0.5rem' }}>No orders yet</h3>
+                    <p style={{ color: 'var(--adm-muted)', fontSize: '0.875rem' }}>Customer orders will appear here when they checkout.</p>
                 </div>
-            ) : (
-                <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-                    <Table>
-                        <TableHeader>
-                            <TableRow className="bg-muted/50 hover:bg-muted/50">
-                                <TableHead className="w-[200px]">Customer</TableHead>
-                                <TableHead>Items Ordered</TableHead>
-                                <TableHead>Total Price</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {orders.map((order) => (
-                                <TableRow key={order.id} className="transition-colors hover:bg-muted/30">
-                                    <TableCell className="align-top">
-                                        <div className="space-y-1.5">
-                                            <div className="flex items-center gap-2 font-bold">
-                                                <User className="h-3.5 w-3.5 text-primary" />
-                                                {order.customer_name}
-                                            </div>
-                                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                <Phone className="h-3.5 w-3.5" />
-                                                {order.customer_phone}
-                                            </div>
-                                            <div className="text-[10px] text-muted-foreground/60 block pt-1">
-                                                Ref: {order.id.split('-')[0].toUpperCase()}
-                                            </div>
-                                            <div className="text-[10px] text-muted-foreground">
-                                                {new Date(order.created_at).toLocaleString()}
-                                            </div>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="align-top">
-                                        <div className="space-y-1">
-                                            {order.items.map((item: any, idx: number) => (
-                                                <div key={idx} className="text-sm flex justify-between gap-10">
-                                                    <span className="font-medium">{item.name}</span>
-                                                    <span className="text-muted-foreground text-xs whitespace-nowrap">x{item.quantity}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="align-top font-bold text-primary">
-                                        {order.total_price}
-                                    </TableCell>
-                                    <TableCell className="align-top">
-                                        <Badge
-                                            className={cn(
-                                                "capitalize border-none px-3 py-1 font-bold shadow-sm",
-                                                order.status === 'pending' && "bg-amber-100 text-amber-700 hover:bg-amber-100",
-                                                order.status === 'processing' && "bg-blue-100 text-blue-700 hover:bg-blue-100",
-                                                order.status === 'completed' && "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
-                                                order.status === 'cancelled' && "bg-rose-100 text-rose-700 hover:bg-rose-100"
-                                            )}
-                                        >
-                                            {order.status}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-right align-top">
-                                        <div className="flex justify-end gap-2">
-                                            {order.status === 'pending' && (
-                                                <Button
-                                                    size="sm"
-                                                    className="h-8 bg-[#6366f1] hover:bg-[#4f46e5] text-white font-bold shadow-lg shadow-indigo-200 border-none transition-all active:scale-95"
-                                                    onClick={() => updateStatus(order.id, 'processing')}
-                                                >
-                                                    <Loader2 className="mr-1.5 h-3.5 w-3.5" />
-                                                    Process
-                                                </Button>
-                                            )}
-                                            {order.status === 'processing' && (
-                                                <Button
-                                                    size="sm"
-                                                    className="h-8 bg-[#10b981] hover:bg-[#059669] text-white font-bold shadow-lg shadow-emerald-200 border-none transition-all active:scale-95"
-                                                    onClick={() => updateStatus(order.id, 'completed')}
-                                                >
-                                                    <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                                                    Complete
-                                                </Button>
-                                            )}
-                                            {(order.status === 'pending' || order.status === 'processing') && (
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="h-8 border-rose-200 text-rose-500 hover:bg-rose-50 hover:text-rose-600 font-bold"
-                                                    onClick={() => updateStatus(order.id, 'cancelled')}
-                                                >
-                                                    <XCircle className="h-3.5 w-3.5" />
-                                                </Button>
-                                            )}
-                                            <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                className="h-8 text-muted-foreground hover:text-destructive"
-                                                onClick={() => deleteOrder(order.id)}
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+            )}
+
+            {/* Orders list */}
+            {orders.length > 0 && (
+                <div className="ord-list">
+                    {/* Table head */}
+                    <div className="ord-list-head">
+                        <span>Customer</span>
+                        <span>Items</span>
+                        <span>Total</span>
+                        <span>Status</span>
+                        <span className="ord-col-actions-head">Actions</span>
+                    </div>
+
+                    {orders.map((order) => (
+                        <div key={order.id} className="ord-row">
+                            {/* Customer */}
+                            <div className="ord-cell ord-customer">
+                                <div className="ord-avatar">
+                                    <User className="h-4 w-4" />
+                                </div>
+                                <div>
+                                    <p className="ord-customer-name">{order.customer_name}</p>
+                                    <p className="ord-customer-phone">
+                                        <Phone className="h-3 w-3" />
+                                        {order.customer_phone}
+                                    </p>
+                                    <p className="ord-ref">#{order.id.split('-')[0].toUpperCase()} · {new Date(order.created_at).toLocaleDateString()}</p>
+                                </div>
+                            </div>
+
+                            {/* Items */}
+                            <div className="ord-cell ord-items">
+                                {order.items.map((item: any, idx: number) => (
+                                    <div key={idx} className="ord-item-row">
+                                        <span className="ord-item-name">{item.name}</span>
+                                        <span className="ord-item-qty">×{item.quantity}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Total */}
+                            <div className="ord-cell">
+                                <span className="ord-total">{order.total_price}</span>
+                            </div>
+
+                            {/* Status */}
+                            <div className="ord-cell">
+                                <span className={statusClass(order.status)}>{order.status}</span>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="ord-cell ord-actions">
+                                {order.status === 'pending' && (
+                                    <button
+                                        className="ord-btn ord-btn--process"
+                                        onClick={() => updateStatus(order.id, 'processing')}
+                                    >
+                                        <Loader2 className="h-3.5 w-3.5" />
+                                        Process
+                                    </button>
+                                )}
+                                {order.status === 'processing' && (
+                                    <button
+                                        className="ord-btn ord-btn--complete"
+                                        onClick={() => updateStatus(order.id, 'completed')}
+                                    >
+                                        <CheckCircle2 className="h-3.5 w-3.5" />
+                                        Complete
+                                    </button>
+                                )}
+                                {(order.status === 'pending' || order.status === 'processing') && (
+                                    <button
+                                        className="ord-btn ord-btn--cancel"
+                                        onClick={() => updateStatus(order.id, 'cancelled')}
+                                        aria-label="Cancel order"
+                                    >
+                                        <XCircle className="h-3.5 w-3.5" />
+                                    </button>
+                                )}
+                                <button
+                                    className="ord-btn ord-btn--delete"
+                                    onClick={() => deleteOrder(order.id)}
+                                    aria-label="Delete order"
+                                >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                            </div>
+                        </div>
+                    ))}
                 </div>
             )}
         </div>

@@ -27,7 +27,7 @@ const russoOne = Russo_One({
 })
 
 export const metadata: Metadata = {
-  title: 'Zoom BXU Auto Parts - Quality Parts You Can Trust',
+  title: 'Zoom Bxu Surplus',
   description: 'Your trusted source for quality auto parts. Easy to browse, easy to order. Serving car enthusiasts and everyday drivers since 1985.',
   icons: {
     icon: '/images/zoombxulogo.png',
@@ -52,7 +52,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Zoom BXU Auto Parts - Quality Parts You Can Trust',
+    title: 'Zoom Bxu Surplus',
     description: 'Your trusted source for quality auto parts. Easy to browse, easy to order. Serving car enthusiasts and everyday drivers since 1985.',
     images: ['/images/zoombxu.png'],
   },
