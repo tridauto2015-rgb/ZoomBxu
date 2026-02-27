@@ -71,12 +71,12 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${playfair.variable} ${russoOne.variable}`}>
+    <html lang="en" className={`${inter.variable} ${playfair.variable} ${russoOne.variable}`} suppressHydrationWarning>
       <head>
         <link rel="icon" type="image/png" sizes="32x32" href="/images/zoombxulogo.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/images/zoombxulogo.png" />
       </head>
-      <body className="font-sans antialiased">
+      <body className="font-sans antialiased" suppressHydrationWarning>
         <AuthProvider>
           <AdminProvider>
             <ProductsProvider>
