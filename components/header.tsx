@@ -11,11 +11,13 @@ import { UserOrders } from "./user-orders"
 import { AuthModal } from "./auth-modal"
 import { LogOut, User as UserIcon, LogIn } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ThemeToggle } from "./theme-toggle"
+import { usePathname } from "next/navigation"
 
 const navLinks = [
-  { label: "Home", href: "#home" },
-  { label: "Shop", href: "#products" },
-  { label: "Contact", href: "#contact" },
+  { label: "Home", href: "/#home" },
+  { label: "Shop", href: "/#products" },
+  { label: "Contact", href: "/#contact" },
 ]
 
 export function Header() {
@@ -23,42 +25,40 @@ export function Header() {
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const { isAdmin } = useAdmin()
   const { user, isAuthenticated, logout } = useAuth()
+  const pathname = usePathname()
 
   const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    // Extract only the hash part for looking up elements (e.g. "/#products" -> "products")
+    const targetId = href.includes('#') ? href.split('#')[1] : href.replace('#', '')
+    
+    // If not on home page, allow default navigation to home with hash
+    if (pathname !== '/') {
+        return
+    }
+
     e.preventDefault()
-    const targetId = href.replace('#', '')
     const element = document.getElementById(targetId)
 
     // Close mobile menu first
     setMobileOpen(false)
 
     if (element) {
-      // Check if mobile and use appropriate scrolling method
       if (window.innerWidth < 768) {
-        // Mobile: Use immediate scroll with fallback
-        const headerHeight = 64 // Mobile header height
+        const headerHeight = 64 
         const targetPosition = element.offsetTop - headerHeight
 
-        // Small delay to ensure mobile menu is closed
         setTimeout(() => {
-          if ('scrollBehavior' in document.documentElement.style) {
-            // Modern mobile browsers - use CSS smooth scroll
-            window.scrollTo({
-              top: targetPosition,
-              behavior: 'smooth'
-            })
-          } else {
-            // Older mobile browsers - immediate scroll
-            window.scrollTo(0, targetPosition)
-          }
-        }, 150) // Delay for mobile menu closure
+          window.scrollTo({
+            top: targetPosition,
+            behavior: 'smooth'
+          })
+        }, 150) 
       } else {
-        // Desktop: Keep original elegant animation
-        const headerHeight = 80 // Desktop header height
+        const headerHeight = 80 
         const startPosition = window.pageYOffset
         const targetPosition = element.offsetTop - headerHeight
         const distance = targetPosition - startPosition
-        const duration = 1500 // 1.5 seconds for desktop
+        const duration = 1500 
 
         let start: number | null = null
 
@@ -67,7 +67,6 @@ export function Header() {
           const timeElapsed = currentTime - start
           const progress = Math.min(timeElapsed / duration, 1)
 
-          // Easing function for smooth acceleration and deceleration
           const easeInOutCubic = progress < 0.5
             ? 4 * progress * progress * progress
             : 1 - Math.pow(-2 * progress + 2, 3) / 2
@@ -91,7 +90,7 @@ export function Header() {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           {/* Logo */}
           <a
-            href="#home"
+            href="/#home"
             onClick={(e) => handleSmoothScroll(e, "#home")}
             className="flex items-center gap-3"
           >
@@ -100,6 +99,7 @@ export function Header() {
                 src="/images/zoombxu.png"
                 alt="Zoom BXU Logo"
                 fill
+                priority
                 className="object-contain"
                 sizes="(max-width: 768px) 80px, 80px"
               />
@@ -153,6 +153,7 @@ export function Header() {
             )}
 
             <div className="flex items-center gap-3">
+              <ThemeToggle />
               <UserOrders />
               <div className="cart-container">
                 <Cart />

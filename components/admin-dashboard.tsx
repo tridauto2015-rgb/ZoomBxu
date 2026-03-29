@@ -23,6 +23,7 @@ export function AdminDashboard() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>("products")
   const [unreadCount, setUnreadCount] = useState(0)
+  const [chatSessionId, setChatSessionId] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
@@ -49,7 +50,17 @@ export function AdminDashboard() {
 
   useEffect(() => {
     if (activeTab === "messages") setUnreadCount(0)
+    if (activeTab !== "messages") setChatSessionId(null);
   }, [activeTab])
+
+  useEffect(() => {
+    const handleNavToChat = (e: any) => {
+        setChatSessionId(e.detail)
+        setActiveTab("messages")
+    }
+    window.addEventListener('nav-to-chat', handleNavToChat)
+    return () => window.removeEventListener('nav-to-chat', handleNavToChat)
+  }, [])
 
   const handleAddProduct = () => {
     setEditingProduct(null)
@@ -62,7 +73,7 @@ export function AdminDashboard() {
     setShowForm(true)
   }
 
-  const handleDeleteProduct = (id: number) => {
+  const handleDeleteProduct = (id: string) => {
     if (confirm("Are you sure you want to delete this product?")) {
       deleteProduct(id)
     }
@@ -72,11 +83,7 @@ export function AdminDashboard() {
     if (editingProduct) {
       updateProduct(editingProduct.id, { ...product, id: editingProduct.id })
     } else {
-      const newProduct = {
-        ...product,
-        id: products.length > 0 ? Math.max(...products.map((p) => p.id)) + 1 : 1,
-      }
-      addProduct(newProduct)
+      addProduct(product)
     }
     setShowForm(false)
     setEditingProduct(null)
@@ -289,7 +296,7 @@ export function AdminDashboard() {
         {/* ── Messages Tab ── */}
         {activeTab === "messages" && (
           <div className="admin-section">
-            <AdminChat />
+            <AdminChat initialSessionId={chatSessionId} />
           </div>
         )}
       </main>

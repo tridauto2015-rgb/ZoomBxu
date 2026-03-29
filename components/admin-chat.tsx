@@ -23,9 +23,9 @@ interface ChatSession {
     last_active: string
 }
 
-export function AdminChat() {
+export function AdminChat({ initialSessionId }: { initialSessionId?: string | null }) {
     const [sessions, setSessions] = useState<ChatSession[]>([])
-    const [activeSession, setActiveSession] = useState<string | null>(null)
+    const [activeSession, setActiveSession] = useState<string | null>(initialSessionId || null)
     const [messages, setMessages] = useState<Message[]>([])
     const [newMessage, setNewMessage] = useState("")
     const [isLoading, setIsLoading] = useState(false)
@@ -40,37 +40,103 @@ export function AdminChat() {
                 const msg = payload.new as Message
                 fetchSessions()
                 if (activeSession && (msg.sender_id === activeSession || msg.recipient_id === activeSession)) {
-                    setMessages((prev) => [...prev, msg])
+                    setMessages((prev) => {
+                        // 1. Prevent exact duplicate by UUID
+                        if (prev.some(m => m.id === msg.id)) return prev;
+                        
+                        // 2. Identify if this is a server-confirmation of a local 'temp' message
+                        // We check for matching content and that the local one is a 'temp-' ID
+                        const tempIdx = prev.findIndex(m => m.id?.startsWith('temp-') && m.content === msg.content);
+                        
+                        if (tempIdx !== -1) {
+                            const updated = [...prev];
+                            updated[tempIdx] = msg; // Swap temp for real UUID from server
+                            return updated;
+                        }
+                        
+                        return [...prev, msg];
+                    });
                 }
             })
-            .subscribe()
+            .subscribe((status: string) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log(`Subscribed to admin messages channel.`)
+                }
+                if (status === 'CHANNEL_ERROR') {
+                    console.warn("Real-time for admin failed. Please check if 'Realtime' is enabled for 'messages' table in Supabase project dashboard.")
+                }
+            })
         return () => { supabase.removeChannel(channel) }
     }, [activeSession])
 
     useEffect(() => {
+        if (initialSessionId) {
+            handleSelectSession(initialSessionId)
+        }
+    }, [initialSessionId])
+
+    useEffect(() => {
         if (scrollRef.current) {
-            scrollRef.current.scrollIntoView({ behavior: "smooth" })
+            scrollRef.current.scrollIntoView({ behavior: "auto" })
         }
     }, [messages])
 
     const fetchSessions = async () => {
         const { data } = await supabase
             .from('messages')
-            .select('sender_id, sender_name, content, created_at')
+            .select('sender_id, sender_name, recipient_id, content, created_at')
             .order('created_at', { ascending: false })
+            
         if (data) {
-            const uniqueSessions: Record<string, ChatSession> = {}
+            // Priority 1: UUID string, Priority 2: Phone number, Priority 3: anonymous/other
+            const isUUID = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+            const idGroupMap: Record<string, ChatSession> = {}
+            
             data.forEach((msg: any) => {
-                if (msg.sender_id !== 'admin' && !uniqueSessions[msg.sender_id]) {
-                    uniqueSessions[msg.sender_id] = {
-                        sender_id: msg.sender_id,
-                        sender_name: msg.sender_name || 'Customer',
+                const customerId = msg.sender_id === 'admin' ? msg.recipient_id : msg.sender_id;
+                const customerName = msg.sender_id === 'admin' ? null : msg.sender_name;
+                
+                if (!customerId || customerId === 'admin') return;
+
+                if (!idGroupMap[customerId]) {
+                    idGroupMap[customerId] = {
+                        sender_id: customerId,
+                        sender_name: customerName || 'Customer',
                         last_message: msg.content,
                         last_active: msg.created_at,
                     }
+                } else if (!idGroupMap[customerId].sender_name || idGroupMap[customerId].sender_name === 'Customer') {
+                    if (customerName) idGroupMap[customerId].sender_name = customerName;
                 }
             })
-            setSessions(Object.values(uniqueSessions))
+
+            const finalSessionsMap: Record<string, ChatSession> = {}
+            
+            Object.values(idGroupMap).forEach(session => {
+                const name = session.sender_name;
+                const isProfessionalName = name && !['Guest', 'anonymous', 'User', 'Customer'].includes(name);
+                const mergeKey = isProfessionalName ? name : session.sender_id;
+
+                if (!finalSessionsMap[mergeKey]) {
+                    finalSessionsMap[mergeKey] = session;
+                } else {
+                    const existing = finalSessionsMap[mergeKey];
+                    // Pick the best ID: UUID wins over anything else
+                    if (!isUUID(existing.sender_id) && isUUID(session.sender_id)) {
+                        existing.sender_id = session.sender_id;
+                    }
+                    // Keep most recent activity
+                    if (new Date(session.last_active) > new Date(existing.last_active)) {
+                        existing.last_active = session.last_active;
+                        existing.last_message = session.last_message;
+                    }
+                }
+            })
+
+            setSessions(Object.values(finalSessionsMap).sort((a, b) => 
+                new Date(b.last_active).getTime() - new Date(a.last_active).getTime()
+            ))
         }
     }
 
@@ -95,14 +161,28 @@ export function AdminChat() {
         if (!newMessage.trim() || !activeSession) return
         const content = newMessage
         setNewMessage("")
-        const { error } = await supabase.from('messages').insert([{
+        // Optimistic UI for admin
+        const msgObj: Message = {
+            id: 'temp-' + Math.random().toString(), // Use temp prefix for local 
+            created_at: new Date().toISOString(),
             content,
             sender_id: 'admin',
             sender_name: 'Admin',
             is_admin: true,
             recipient_id: activeSession,
-        }])
-        if (error) toast.error("Failed to send message")
+        }
+        setMessages(prev => [...prev, msgObj])
+        fetchSessions() // Update sidebar immediately
+
+        // Prepare object for Supabase (Omit the temp ID to avoid UUID type error)
+        const { id, ...supabaseData } = msgObj;
+
+        const { error } = await supabase.from('messages').insert([supabaseData])
+        if (error) {
+            console.error("Admin Send Error:", error)
+            toast.error(`Failed to send: ${error.message}`)
+            setMessages(prev => prev.filter(m => m.id !== msgObj.id)) // Rollback
+        }
     }
 
     const handleDeleteMessage = async (messageId: string) => {
@@ -211,23 +291,37 @@ export function AdminChat() {
                                     >
                                         <div className={cn("chat-bubble", msg.is_admin ? "chat-bubble--admin" : "chat-bubble--customer")}>
                                             <div className="chat-bubble-content">
-                                                {msg.content.split('\n').map((line, idx) => (
-                                                    <div key={idx}>
-                                                        {line.match(/https?:\/\/\S+\.(?:png|jpg|jpeg|gif|webp)/i) ? (
-                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                                <span>{line.split('http')[0]}</span>
-                                                                <img
-                                                                    src={line.match(/https?:\/\/\S+/i)?.[0]}
-                                                                    alt="Attached photo"
-                                                                    className="chat-bubble-img"
-                                                                    onLoad={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
-                                                                />
-                                                            </div>
-                                                        ) : (
-                                                            <span style={{ wordBreak: 'break-word' }}>{line}</span>
-                                                        )}
-                                                    </div>
-                                                ))}
+                                                {(() => {
+                                                    const lines = msg.content.split('\n');
+                                                    
+                                                    return (
+                                                        <div className="space-y-1 w-full overflow-hidden">
+                                                            {lines.map((line, idx) => {
+                                                                const isHeader = line.includes("I would like to checkout");
+                                                                const isSummaryLine = line.includes("(x") && line.includes("- ₱");
+                                                                const isFeeLine = line.includes("Fee):") || line.includes("Delivery Fee:");
+                                                                const isImageLabel = line.endsWith(":");
+
+                                                                if (isHeader) return <p key={idx} className="font-bold border-b border-white/10 pb-1 mb-2 text-[10px] uppercase tracking-widest opacity-80">{line}</p>;
+                                                                
+                                                                if (line.match(/https?:\/\/\S+\.(?:png|jpg|jpeg|gif|webp)/i)) {
+                                                                    const url = line.match(/https?:\/\/\S+/i)?.[0];
+                                                                    return (
+                                                                        <div key={idx} className="mt-2 relative overflow-hidden rounded-lg border border-white/5 bg-black/5">
+                                                                            <img src={url} alt="Order attachment" className="chat-bubble-img h-auto max-w-full rounded-lg object-contain m-0" />
+                                                                        </div>
+                                                                    );
+                                                                }
+
+                                                                if (isSummaryLine) return <div key={idx} className="flex justify-between items-center bg-white/5 border border-white/5 px-2 py-1 rounded text-[11px] font-mono"><span className="opacity-80 truncate mr-2">{line.split('-')[0]}</span><span className="font-bold">{line.split('-')[1]}</span></div>;
+                                                                if (isFeeLine) return <div key={idx} className="text-[10px] font-black uppercase tracking-tighter opacity-50 mt-1 text-right">{line}</div>;
+                                                                if (isImageLabel) return <p key={idx} className="text-[9px] font-black uppercase tracking-[0.2em] mt-3 mb-1 opacity-40">{line}</p>;
+                                                                
+                                                                return line.trim() ? <div key={idx} className="whitespace-pre-wrap break-words min-w-0">{line}</div> : null;
+                                                            })}
+                                                        </div>
+                                                    );
+                                                })()}
                                             </div>
                                             {!msg.is_admin && (
                                                 <button

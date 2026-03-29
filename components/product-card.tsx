@@ -8,11 +8,11 @@ import { useCart } from "@/contexts/cart-context"
 import { useAuth } from "@/contexts/auth-context"
 import { AuthModal } from "./auth-modal"
 import { toast } from "sonner"
-import { cn } from "@/lib/utils"
+import { cn, formatCurrency } from "@/lib/utils"
 import gsap from "gsap"
 
 export interface Product {
-  id: number
+  id: string
   name: string
   price: string
   originalPrice?: string
@@ -177,12 +177,12 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
           <div className="mt-auto flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold text-foreground">
-                  {product.price}
+                <span className="text-2xl font-black text-foreground tracking-tighter">
+                  {formatCurrency(product.price)}
                 </span>
                 {product.originalPrice && (
-                  <span className="text-lg text-muted-foreground line-through">
-                    {product.originalPrice}
+                  <span className="text-lg text-muted-foreground/50 line-through decoration-destructive/30 decoration-2">
+                    {formatCurrency(product.originalPrice)}
                   </span>
                 )}
               </div>

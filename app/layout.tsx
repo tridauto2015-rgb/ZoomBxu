@@ -27,6 +27,7 @@ const russoOne = Russo_One({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://zoombxusurplus.vercel.app'),
   title: 'Zoom Bxu Surplus',
   description: 'Your trusted source for quality auto parts. Easy to browse, easy to order. Serving car enthusiasts and everyday drivers since 1985.',
   icons: {
@@ -83,7 +84,7 @@ export default function RootLayout({
               <CartProvider>
                 {children}
                 <ChatBox />
-                <Toaster />
+                <Toaster position="top-center" />
               </CartProvider>
             </ProductsProvider>
           </AdminProvider>

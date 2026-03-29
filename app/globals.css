@@ -240,7 +240,7 @@ html {
 
 /* Unique Professional Toast Styling */
 .sonner-toast-unique {
-  border-left: 4px solid hsl(var(--primary)) !important;
+  /* Removed border-left as per user request */
 }
 
 [data-sonner-toast] [data-icon] {

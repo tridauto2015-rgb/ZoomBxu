@@ -20,10 +20,11 @@ interface Message {
     sender_id: string
     sender_name: string
     is_admin: boolean
+    recipient_id: string
 }
 
 export function ChatBox() {
-    const { user, isAuthenticated } = useAuth()
+    const { user, isAuthenticated, supabaseUser } = useAuth()
     const { isAdmin } = useAdmin()
     const pathname = usePathname()
     const [isOpen, setIsOpen] = useState(false)
@@ -36,8 +37,8 @@ export function ChatBox() {
     const scrollRef = useRef<HTMLDivElement>(null)
     const audioRef = useRef<HTMLAudioElement | null>(null)
 
-    // Identity: for simplicity, we use the phone number as the ID
-    const userId = user?.phone || "anonymous"
+    // Unified identity: prioritize UUID, fallback to phone
+    const userId = supabaseUser?.id || user?.phone || "anonymous"
     const userName = user?.name || "Guest"
 
     // Initialize audio and title handling
@@ -82,8 +83,8 @@ export function ChatBox() {
             .on('postgres_changes', {
                 event: 'INSERT',
                 schema: 'public',
-                table: 'messages',
-                filter: `recipient_id=eq.${userId}`
+                table: 'messages'
+                // Removed filter to rely on RLS and more robust ID matching
             }, (payload) => {
                 const msg = payload.new as Message
 
@@ -102,12 +103,32 @@ export function ChatBox() {
                     }
                 }
 
-                // If chat is open, add to messages list
-                if (isOpen) {
-                    setMessages((prev) => [...prev, msg])
+                // If chat is open and relevant to us, add to messages list
+                if (isOpen && (msg.sender_id === userId || msg.recipient_id === userId)) {
+                    setMessages((prev) => {
+                        // Prevent exact duplicate by UUID
+                        if (prev.some(m => m.id === msg.id)) return prev;
+                        
+                        // Swap temp for real if this is our own message coming back (sent from another tab maybe)
+                        const tempIdx = prev.findIndex(m => m.id?.startsWith('temp-') && m.content === msg.content);
+                        if (tempIdx !== -1) {
+                            const updated = [...prev];
+                            updated[tempIdx] = msg;
+                            return updated;
+                        }
+                        
+                        return [...prev, msg];
+                    });
                 }
             })
-            .subscribe()
+            .subscribe((status: string) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log(`Real-time listener armed for user: ${userId}`)
+                }
+                if (status === 'CHANNEL_ERROR') {
+                    console.warn("Real-time for customer failed. Please check Supabase replication settings.")
+                }
+            })
 
         return () => {
             supabase.removeChannel(channel)
@@ -145,7 +166,20 @@ export function ChatBox() {
         if (!message.trim()) return
 
         const msgContent = message
-        setMessage("")
+        setMessage("") // Optimistic: clear input
+
+        // Optimistic UI update
+        const newMessage: Message = {
+            id: 'temp-' + Math.random().toString(), // Temp ID
+            content: msgContent,
+            sender_id: userId,
+            sender_name: userName,
+            is_admin: false,
+            recipient_id: 'admin',
+            created_at: new Date().toISOString()
+        }
+        
+        setMessages(prev => [...prev, newMessage])
 
         const { error } = await supabase.from('messages').insert([
             {
@@ -159,17 +193,9 @@ export function ChatBox() {
 
         if (error) {
             console.error("Supabase Error:", error)
-            toast.error(`Error: ${error.message || 'Check database table exists'}`)
-        } else {
-            // Add to local state immediately
-            const newMessage: Message = {
-                content: msgContent,
-                sender_id: userId,
-                sender_name: userName,
-                is_admin: false,
-                created_at: new Date().toISOString()
-            }
-            setMessages(prev => [...prev, newMessage])
+            toast.error(`Error: ${error.message || 'Failed to send'}`)
+            // Rollback optimistic update
+            setMessages(prev => prev.filter(m => m.id !== newMessage.id))
         }
     }
 
@@ -198,7 +224,7 @@ export function ChatBox() {
                 className="fixed inset-0 bg-background/20 backdrop-blur-[2px] z-[45] animate-in fade-in duration-300"
                 onClick={() => setIsOpen(false)}
             />
-            <div className="fixed bottom-6 right-6 w-80 h-[450px] bg-background border border-border rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
+            <div className="fixed bottom-0 right-0 sm:bottom-6 sm:right-6 w-full sm:w-96 h-[100dvh] sm:h-[540px] bg-background border-t sm:border border-border sm:rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
                 {/* Header */}
                 <div className="bg-primary p-4 text-primary-foreground flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -239,27 +265,38 @@ export function ChatBox() {
                                             : "bg-primary text-primary-foreground rounded-tr-none"
                                     )}
                                 >
-                                    {msg.content.split('\n').map((line, idx) => (
-                                        <div key={idx}>
-                                            {line.match(/https?:\/\/\S+\.(?:png|jpg|jpeg|gif|webp)/i) ? (
-                                                <div className="flex flex-col gap-1">
-                                                    <span>{line.split('http')[0]}</span>
-                                                    <img
-                                                        src={line.match(/https?:\/\/\S+/i)?.[0]}
-                                                        alt="Attached photo"
-                                                        className="rounded-lg mt-1 max-w-full border border-white/20 shadow-md"
-                                                        onLoad={() => {
-                                                            if (scrollRef.current) {
-                                                                scrollRef.current.scrollIntoView({ behavior: "smooth" })
-                                                            }
-                                                        }}
-                                                    />
-                                                </div>
-                                            ) : (
-                                                line
-                                            )}
-                                        </div>
-                                    ))}
+                                    {(() => {
+                                        const isOrderMessage = msg.content.includes("I would like to checkout");
+                                        const lines = msg.content.split('\n');
+                                        
+                                        return (
+                                            <div className="space-y-1">
+                                                {lines.map((line, idx) => {
+                                                    const isHeader = line.includes("I would like to checkout");
+                                                    const isSummaryLine = line.includes("(x") && line.includes("- ₱");
+                                                    const isFeeLine = line.includes("Fee):") || line.includes("Delivery Fee:");
+                                                    const isImageLabel = line.endsWith(":");
+
+                                                    if (isHeader) return <p key={idx} className="font-bold border-b border-primary-foreground/20 pb-1 mb-2 text-xs uppercase tracking-widest">{line}</p>;
+                                                    
+                                                    if (line.match(/https?:\/\/\S+\.(?:png|jpg|jpeg|gif|webp)/i)) {
+                                                        const url = line.match(/https?:\/\/\S+/i)?.[0];
+                                                        return (
+                                                            <div key={idx} className="mt-2 group/img relative overflow-hidden rounded-xl border border-white/10 shadow-lg">
+                                                                <img src={url} alt="Order attachment" className="max-w-full h-auto object-cover transform transition-transform group-hover/img:scale-105 duration-500" />
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    if (isSummaryLine) return <div key={idx} className="flex justify-between items-center bg-black/10 px-2 py-1 rounded text-[11px] font-mono"><span className="opacity-80 truncate mr-2">{line.split('-')[0]}</span><span className="font-bold">{line.split('-')[1]}</span></div>;
+                                                    if (isFeeLine) return <div key={idx} className="text-[10px] font-black uppercase tracking-tighter opacity-70 mt-2 text-right">{line}</div>;
+                                                    if (isImageLabel) return <p key={idx} className="text-[9px] font-black uppercase tracking-[0.2em] mt-3 mb-1 text-primary-foreground/60">{line}</p>;
+                                                    
+                                                    return line.trim() ? <div key={idx} className="whitespace-pre-wrap break-words min-w-0">{line}</div> : null;
+                                                })}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                                 <span className="text-[10px] text-muted-foreground mt-1 px-1">
                                     {msg.is_admin ? "Admin" : "You"} • {new Date(msg.created_at || new Date()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

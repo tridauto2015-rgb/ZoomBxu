@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Product } from "./product-card"
 import { X, Save, Upload } from "lucide-react"
 import { useRef } from "react"
+import { supabase } from "@/lib/supabase"
 
 interface ProductFormProps {
   product?: Product | null
@@ -29,28 +30,34 @@ export function ProductForm({ product, onSave, onCancel }: ProductFormProps) {
     const files = e.target.files
     if (!files || files.length === 0) return
     setUploading(true)
+
     try {
-      const uploadedImages: string[] = []
+      const uploadedUrls: string[] = []
+
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
-        const reader = new FileReader()
-        const base64Promise = new Promise<string>((resolve) => {
-          reader.onload = () => resolve(reader.result as string)
-          reader.readAsDataURL(file)
-        })
-        const base64 = await base64Promise
-        const response = await fetch("/api/upload", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ file: base64 }),
-        })
-        if (response.ok) {
-          const result = await response.json()
-          uploadedImages.push(result.url)
+        const fileExt = file.name.split('.').pop()
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
+        const filePath = `products/${fileName}`
+
+        const { error } = await supabase.storage
+          .from('product-images')
+          .upload(filePath, file, { cacheControl: '3600', upsert: false })
+
+        if (error) {
+          console.error('Upload error:', error)
+          continue
         }
+
+        const { data: urlData } = supabase.storage
+          .from('product-images')
+          .getPublicUrl(filePath)
+
+        uploadedUrls.push(urlData.publicUrl)
       }
+
       const currentImages = formData.images.split(",").filter((img) => img.trim())
-      const allImages = [...currentImages, ...uploadedImages].join(", ")
+      const allImages = [...currentImages, ...uploadedUrls].join(", ")
       setFormData((prev) => ({ ...prev, images: allImages }))
     } catch (error) {
       console.error("Upload failed:", error)

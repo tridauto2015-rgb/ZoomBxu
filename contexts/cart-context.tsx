@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react"
 import { Product } from "@/components/product-card"
+import { formatCurrency } from "@/lib/utils"
 
 export interface CartItem extends Product {
   quantity: number
@@ -10,10 +11,11 @@ export interface CartItem extends Product {
 interface CartContextType {
   cart: CartItem[]
   addToCart: (product: Product) => void
-  removeFromCart: (productId: number) => void
-  updateQuantity: (productId: number, quantity: number) => void
+  removeFromCart: (productId: string) => void
+  updateQuantity: (productId: string, quantity: number) => void
   clearCart: () => void
   getCartTotal: () => string
+  getRawTotal: () => number
   getCartCount: () => number
 }
 
@@ -65,11 +67,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
     })
   }
 
-  const removeFromCart = (productId: number) => {
+  const removeFromCart = (productId: string) => {
     setCart(currentCart => currentCart.filter(item => item.id !== productId))
   }
 
-  const updateQuantity = (productId: number, quantity: number) => {
+  const updateQuantity = (productId: string, quantity: number) => {
     if (quantity <= 0) {
       removeFromCart(productId)
       return
@@ -86,12 +88,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setCart([])
   }
 
-  const getCartTotal = () => {
-    const total = cart.reduce((sum, item) => {
+  const getRawTotal = () => {
+    return cart.reduce((sum, item) => {
       const price = parseFloat(item.price.replace('₱', '').replace(',', ''))
       return sum + (price * item.quantity)
     }, 0)
-    return `₱${total.toFixed(2)}`
+  }
+
+  const getCartTotal = () => {
+    return formatCurrency(getRawTotal())
   }
 
   const getCartCount = () => {
@@ -106,6 +111,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       updateQuantity,
       clearCart,
       getCartTotal,
+      getRawTotal,
       getCartCount
     }}>
       {children}
