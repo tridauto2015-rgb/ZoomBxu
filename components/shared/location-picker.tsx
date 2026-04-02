@@ -54,7 +54,7 @@ function MapController({
 
     useEffect(() => {
         if (position) {
-            const zoomLevel = shouldZoom ? 22 : map.getZoom();
+            const zoomLevel = shouldZoom ? 17 : map.getZoom();
             map.flyTo([position.lat, position.lng], zoomLevel, { animate: true });
         }
     }, [position, map, shouldZoom]);
@@ -73,9 +73,24 @@ export default function LocationPicker({ onLocationSelect, onAddressResolve, def
     const resolveAddress = async (lat: number, lng: number) => {
         setIsResolving(true);
         try {
-            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, {
-                headers: { 'Accept-Language': 'en' }
+            const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
+            const res = await fetch(url, {
+                headers: { 'Accept-Language': 'en', 'User-Agent': 'ZoomBxu-Ecom' }
             });
+
+            if (!res.ok) {
+                console.warn("Geocoding service returned an error status:", res.status);
+                setAddress("Location details currently restricted");
+                return;
+            }
+
+            const contentType = res.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+                console.warn("Geocoding service did not return JSON");
+                setAddress("Service temporarily unavailable");
+                return;
+            }
+
             const data = await res.json();
             const resolved = data.display_name || "Unknown Location";
             setAddress(resolved);

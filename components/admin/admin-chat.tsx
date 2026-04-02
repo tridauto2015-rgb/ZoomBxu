@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabase"
-import { MessageSquare, Send, User, Loader2, Search, Trash2, ArrowLeft, TerminalSquare } from "lucide-react"
+import { MessageSquare, Send, User, Loader2, Search, Trash2, ArrowLeft, TerminalSquare, Paperclip, Image as ImageIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
@@ -10,6 +10,7 @@ interface Message {
     id: string
     created_at: string
     content: string
+    image_url?: string | null
     sender_id: string
     sender_name: string
     is_admin: boolean
@@ -31,6 +32,11 @@ export function AdminChat({ initialSessionId }: { initialSessionId?: string | nu
     const [isLoading, setIsLoading] = useState(false)
     const [searchQuery, setSearchQuery] = useState("")
     const scrollRef = useRef<HTMLDivElement>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
+    const [isUploading, setIsUploading] = useState(false)
+    const [tempImageUrl, setTempImageUrl] = useState<string | null>(null)
+    const [selectedFile, setSelectedFile] = useState<File | null>(null)
+    const [presetImageUrl, setPresetImageUrl] = useState<string | null>(null)
 
     useEffect(() => {
         fetchSessions()
@@ -71,9 +77,12 @@ export function AdminChat({ initialSessionId }: { initialSessionId?: string | nu
 
     useEffect(() => {
         if (scrollRef.current) {
-            scrollRef.current.scrollIntoView({ behavior: "auto" })
+            const timer = setTimeout(() => {
+                scrollRef.current?.scrollIntoView({ behavior: "auto" })
+            }, 100)
+            return () => clearTimeout(timer)
         }
-    }, [messages])
+    }, [messages, activeSession])
 
     const fetchSessions = async () => {
         const { data } = await supabase
@@ -143,18 +152,77 @@ export function AdminChat({ initialSessionId }: { initialSessionId?: string | nu
 
     const handleSelectSession = (id: string) => {
         setActiveSession(id)
+        setTempImageUrl(null)
+        setSelectedFile(null)
+        setPresetImageUrl(null)
         fetchMessages(id)
+    }
+    
+    const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        
+        // Reset preset if we're picking a new file
+        setPresetImageUrl(null)
+        
+        const reader = new FileReader()
+        reader.onload = (e) => setTempImageUrl(e.target?.result as string)
+        reader.readAsDataURL(file)
+        setSelectedFile(file)
+    }
+    
+    const uploadImage = async (file: File): Promise<string | null> => {
+        try {
+            const fileExt = file.name.split('.').pop()
+            const fileName = `admin/${activeSession}/${Math.random()}.${fileExt}`
+            const filePath = `chat-attachments/${fileName}`
+            
+            const { data, error } = await supabase.storage
+                .from('chat-attachments')
+                .upload(filePath, file)
+                
+            if (error) throw error
+            
+            const { data: { publicUrl } } = supabase.storage
+                .from('chat-attachments')
+                .getPublicUrl(filePath)
+                
+            return publicUrl
+        } catch (error: any) {
+            console.error("Admin Upload Error:", error)
+            toast.error("Upload failed")
+            return null
+        }
     }
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!newMessage.trim() || !activeSession) return
+        if ((!newMessage.trim() && !selectedFile && !presetImageUrl) || !activeSession) return
+        
+        setIsUploading(true)
+        let finalImageUrl = presetImageUrl
+        
+        if (selectedFile && !finalImageUrl) {
+            finalImageUrl = await uploadImage(selectedFile)
+            if (!finalImageUrl) {
+                setIsUploading(false)
+                return
+            }
+        }
+
         const content = newMessage
+        const photoUrl = finalImageUrl
+        
         setNewMessage("")
+        setTempImageUrl(null)
+        setSelectedFile(null)
+        setPresetImageUrl(null)
+
         const msgObj: Message = {
             id: 'temp-' + Math.random().toString(),
             created_at: new Date().toISOString(),
             content,
+            image_url: photoUrl,
             sender_id: 'admin',
             sender_name: 'Admin',
             is_admin: true,
@@ -162,12 +230,45 @@ export function AdminChat({ initialSessionId }: { initialSessionId?: string | nu
         }
         setMessages(prev => [...prev, msgObj])
         fetchSessions()
-        const { id, ...supabaseData } = msgObj;
-        const { error } = await supabase.from('messages').insert([supabaseData])
+        
+        // Explicitly build the payload to ensure no extra fields (like temp IDs) 
+        // and only include image_url if it's actually been provided.
+        const payload: any = {
+            content: msgObj.content,
+            sender_id: msgObj.sender_id,
+            sender_name: msgObj.sender_name,
+            is_admin: msgObj.is_admin,
+            recipient_id: msgObj.recipient_id,
+        };
+        
+        if (msgObj.image_url) {
+            payload.image_url = msgObj.image_url;
+        }
+        
+        console.log("[AdminChat] Sending payload:", JSON.stringify(payload, null, 2));
+        
+        const { error } = await supabase.from('messages').insert([payload])
+        
+        setIsUploading(false)
         if (error) {
-            console.error("Admin Send Error:", error)
-            toast.error(`Failed to send: ${error.message}`)
+            console.error("[AdminChat] Send Error Details:", JSON.stringify(error, null, 2));
+            console.error("Error Code:", error.code);
+            console.error("Error Message:", error.message);
+            console.error("Error Hint:", (error as any).hint);
+            console.error("Error Details:", (error as any).details);
+            
+            // If the error code is 42703, it means the image_url column is missing
+            if (error.code === '42703') {
+                toast.error("Database schema mismatch: 'image_url' column is missing. Please run the SQL fix in main.sql.")
+            } else if (error.code === '42501') {
+                toast.error("Permission denied. Check if RLS is enabled on the messages table.")
+            } else {
+                toast.error(`Failed to send: ${error.message || 'Unknown error'}`)
+            }
+            
             setMessages(prev => prev.filter(m => m.id !== msgObj.id))
+        } else {
+            console.log("[AdminChat] Message sent successfully");
         }
     }
 
@@ -180,6 +281,28 @@ export function AdminChat({ initialSessionId }: { initialSessionId?: string | nu
             setMessages((prev) => prev.filter((msg) => msg.id !== messageId))
             toast.success("Message deleted")
         }
+    }
+
+    const handleDeleteConversation = async () => {
+        if (!activeSession) return
+        if (!confirm(`CAUTION: Are you sure you want to PERMANENTLY delete ALL messages with this customer? This cannot be undone.`)) return
+        
+        setIsLoading(true)
+        const { error } = await supabase
+            .from('messages')
+            .delete()
+            .or(`sender_id.eq.${activeSession},recipient_id.eq.${activeSession}`)
+
+        if (error) {
+            console.error("Delete Session Error:", error)
+            toast.error("Failed to clear chat log")
+        } else {
+            setMessages([])
+            setActiveSession(null)
+            fetchSessions()
+            toast.success("Conversation cleared successfully")
+        }
+        setIsLoading(false)
     }
 
     const filteredSessions = sessions.filter((s) =>
@@ -277,6 +400,15 @@ export function AdminChat({ initialSessionId }: { initialSessionId?: string | nu
                                     ID: {activeSession.substring(0, 8)}...
                                 </span>
                             </div>
+                            <div className="ml-auto flex items-center gap-2">
+                                <button
+                                    onClick={handleDeleteConversation}
+                                    className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-500/10 transition-all rounded-sm border border-transparent hover:border-red-500/20"
+                                    title="Delete entire conversation"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
                         </div>
 
                         {/* Messages Area */}
@@ -298,6 +430,16 @@ export function AdminChat({ initialSessionId }: { initialSessionId?: string | nu
                                                 ? "bg-[#f4a732] text-black border-[#f4a732] rounded-br-none" 
                                                 : "bg-[#181c27] text-[#e8eaf0] border-white/10 rounded-bl-none"
                                         )}>
+                                            {msg.image_url && (
+                                                <div className="mb-2 p-1 bg-black/10 border border-black/5 rounded-sm flex justify-center">
+                                                    <img 
+                                                        src={msg.image_url} 
+                                                        alt="Attachment" 
+                                                        className="max-w-full md:max-w-md h-auto object-contain rounded-sm cursor-zoom-in mx-auto" 
+                                                        onClick={() => window.open(msg.image_url!, '_blank')}
+                                                    />
+                                                </div>
+                                            )}
                                             <div className="font-medium whitespace-pre-wrap break-words min-w-0 leading-relaxed">
                                                 {(() => {
                                                     const lines = msg.content.split('\n');
@@ -351,30 +493,109 @@ export function AdminChat({ initialSessionId }: { initialSessionId?: string | nu
                             <div ref={scrollRef} />
                         </div>
 
-                        {/* Input Area */}
-                        <form onSubmit={handleSendMessage} className="p-3 md:p-4 border-t border-white/5 bg-[#181c27] flex items-end gap-2 relative z-10">
-                            <div className="flex-1 bg-[#0a0a0b] border border-white/10 rounded-sm focus-within:border-[#f4a732] transition-colors p-1">
-                                <textarea
-                                    value={newMessage}
-                                    onChange={(e) => setNewMessage(e.target.value)}
-                                    placeholder="Execute command or transmit message..."
-                                    className="w-full bg-transparent text-white text-xs px-3 py-2 outline-none focus:ring-0 resize-none h-10 max-h-32 min-h-10 scrollbar-thin font-medium"
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && !e.shiftKey) {
-                                            e.preventDefault()
-                                            handleSendMessage(e)
+                        {/* Quick Replies */}
+                        <div className="px-4 py-2 border-t border-white/5 bg-[#11141d] flex flex-wrap gap-2 overflow-x-auto scrollbar-none sticky bottom-0 z-20">
+                            {[
+                                { 
+                                    label: "PAYMENT QR", 
+                                    text: "Please scan our QR code to process your payment.", 
+                                    image: "/images/attachedqr.png" 
+                                },
+                                { label: "EST. DELIVERY", text: "Your item will be shipped in 3 days." },
+                                { label: "LANDMARK", text: "Please provide a landmark for faster delivery." }
+                            ].map((preset, idx) => (
+                                <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => {
+                                        setNewMessage(preset.text);
+                                        if (preset.image) {
+                                            setPresetImageUrl(preset.image);
+                                            setTempImageUrl(preset.image);
+                                            setSelectedFile(null); // Clear selected file if using preset
+                                        } else {
+                                            setPresetImageUrl(null);
                                         }
                                     }}
+                                    className={cn(
+                                        "whitespace-nowrap px-3 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-wider transition-all active:scale-95",
+                                        presetImageUrl === preset.image && preset.image
+                                            ? "bg-[#f4a732]/20 border-[#f4a732] text-[#f4a732]"
+                                            : "bg-white/5 border-white/10 text-slate-400 hover:text-[#f4a732] hover:border-[#f4a732]/30 hover:bg-[#f4a732]/5"
+                                    )}
+                                >
+                                    {preset.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Input Area */}
+                        <form onSubmit={handleSendMessage} className="p-3 md:p-4 border-t border-white/5 bg-[#181c27] flex flex-col gap-2 relative z-10">
+                            {tempImageUrl && (
+                                <div className="mx-1 mb-2 p-2 bg-[#0a0a0b] border border-white/10 rounded-sm flex items-center gap-3 relative animate-in slide-in-from-bottom-2">
+                                    <div className="h-16 w-16 bg-[#181c27] rounded-sm overflow-hidden border border-white/5">
+                                        <img src={tempImageUrl} className="h-full w-full object-cover" alt="Preview" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-[#f4a732] text-[10px] font-black uppercase tracking-widest">
+                                            {presetImageUrl ? 'PRESET ATTACHED' : 'IMAGE LOADED'}
+                                        </p>
+                                        <p className="text-slate-500 text-[9px] font-medium">Ready for transmission</p>
+                                    </div>
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            setTempImageUrl(null)
+                                            setSelectedFile(null)
+                                            setPresetImageUrl(null)
+                                        }}
+                                        className="p-2 hover:bg-white/5 rounded-sm text-slate-500 hover:text-red-500 transition-colors"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            )}
+
+                            <div className="flex items-end gap-2">
+                                <input 
+                                    type="file" 
+                                    ref={fileInputRef}
+                                    className="hidden"
+                                    accept="image/*"
+                                    onChange={handleImageSelect}
                                 />
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={isUploading}
+                                    className="h-10 w-10 shrink-0 bg-[#1e2336] border border-white/10 flex items-center justify-center text-slate-400 hover:text-[#f4a732] hover:border-[#f4a732]/30 transition-all rounded-sm"
+                                >
+                                    <Paperclip className="w-4 h-4" />
+                                </button>
+                                <div className="flex-1 bg-[#0a0a0b] border border-white/10 rounded-sm focus-within:border-[#f4a732] transition-colors p-1">
+                                    <textarea
+                                        value={newMessage}
+                                        onChange={(e) => setNewMessage(e.target.value)}
+                                        placeholder="Execute command or transmit message..."
+                                        className="w-full bg-transparent text-white text-xs px-3 py-2 outline-none focus:ring-0 resize-none h-10 max-h-32 min-h-10 scrollbar-thin font-medium"
+                                        disabled={isUploading}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                e.preventDefault()
+                                                handleSendMessage(e)
+                                            }
+                                        }}
+                                    />
+                                </div>
+                                <button
+                                    type="submit"
+                                    disabled={(!newMessage.trim() && !selectedFile) || isUploading}
+                                    className="h-10 px-4 bg-[#f4a732] hover:bg-[#c8841a] text-black disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0 flex items-center justify-center rounded-sm"
+                                    aria-label="Send"
+                                >
+                                    {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                                </button>
                             </div>
-                            <button
-                                type="submit"
-                                disabled={!newMessage.trim()}
-                                className="h-10 px-4 bg-[#f4a732] hover:bg-[#c8841a] text-black disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0 flex items-center justify-center rounded-sm"
-                                aria-label="Send"
-                            >
-                                <Send className="w-4 h-4" />
-                            </button>
                         </form>
                     </>
                 ) : (

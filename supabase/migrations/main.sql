@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
     id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     created_at    TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     content       TEXT NOT NULL,
+    image_url     TEXT,                                   -- Optional URL for image attachment
     sender_id     TEXT NOT NULL,                          -- auth user UUID or phone number
     sender_name   TEXT NOT NULL DEFAULT 'Guest',
     is_admin      BOOLEAN NOT NULL DEFAULT false,
@@ -165,6 +166,41 @@ BEGIN
     END IF;
 END $$;
 
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 7. STORAGE — Chat attachments bucket & policies
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- Create the storage bucket
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('chat-attachments', 'chat-attachments', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Allow public access to read files
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'objects' AND policyname = 'Public Read Access Chat' AND schemaname = 'storage'
+    ) THEN
+        CREATE POLICY "Public Read Access Chat"
+        ON storage.objects FOR SELECT
+        USING (bucket_id = 'chat-attachments');
+    END IF;
+END $$;
+
+-- Allow users to upload files
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies 
+        WHERE tablename = 'objects' AND policyname = 'Public Upload Access Chat' AND schemaname = 'storage'
+    ) THEN
+        CREATE POLICY "Public Upload Access Chat"
+        ON storage.objects FOR INSERT
+        WITH CHECK (bucket_id = 'chat-attachments');
+    END IF;
+END $$;
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- END OF SCHEMA

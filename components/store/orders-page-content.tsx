@@ -24,7 +24,7 @@ import { cn, formatCurrency } from "@/lib/utils"
 import { toast } from "sonner"
 import Link from "next/link"
 
-const OrderTrackingMap = dynamic(() => import('./order-tracking-map'), { 
+const OrderTrackingMap = dynamic(() => import('@/components/shared/order-tracking-map'), { 
     ssr: false,
     loading: () => (
         <div className="w-full h-[300px] rounded-xl border border-border mt-4 flex items-center justify-center bg-muted/20 animate-pulse">

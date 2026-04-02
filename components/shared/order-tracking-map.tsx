@@ -5,7 +5,7 @@ import { MapContainer, TileLayer, Marker, useMap, Polyline } from 'react-leaflet
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { supabase } from '@/lib/supabase';
-import { Loader2, Timer, Home } from 'lucide-react';
+import { Loader2, Timer, Home, Plus, Minus } from 'lucide-react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 type Location = {
@@ -44,6 +44,38 @@ const riderIcon = L.divIcon({
   iconSize: [32, 32],
   iconAnchor: [16, 16], // Center
 });
+
+// Custom zoom controls component
+function ZoomControls() {
+  const map = useMap();
+  
+  const handleZoomIn = () => {
+    map.zoomIn();
+  };
+  
+  const handleZoomOut = () => {
+    map.zoomOut();
+  };
+  
+  return (
+    <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
+      <button
+        onClick={handleZoomIn}
+        className="w-10 h-10 bg-[#0a0a0b]/90 backdrop-blur-xl rounded-xl border border-white/10 flex items-center justify-center text-white/80 hover:text-white hover:bg-[#1a1a1b]/90 transition-all duration-200 shadow-lg hover:shadow-xl group"
+        title="Zoom in"
+      >
+        <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" />
+      </button>
+      <button
+        onClick={handleZoomOut}
+        className="w-10 h-10 bg-[#0a0a0b]/90 backdrop-blur-xl rounded-xl border border-white/10 flex items-center justify-center text-white/80 hover:text-white hover:bg-[#1a1a1b]/90 transition-all duration-200 shadow-lg hover:shadow-xl group"
+        title="Zoom out"
+      >
+        <Minus className="w-4 h-4 group-hover:scale-110 transition-transform" />
+      </button>
+    </div>
+  );
+}
 
 // A component to beautifully pan when the rider moves
 function UpdateMapCenter({ location }: { location: Location }) {
@@ -114,13 +146,24 @@ export default function OrderTrackingMap({ orderId, customerLocation }: OrderTra
     
     let isCancelled = false;
     const fetchRoute = async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+
       try {
-        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${riderLocation.lng},${riderLocation.lat};${customerLocation.lng},${customerLocation.lat}?overview=full&geometries=geojson`);
+        const url = `https://router.project-osrm.org/route/v1/driving/${riderLocation.lng},${riderLocation.lat};${customerLocation.lng},${customerLocation.lat}?overview=full&geometries=geojson`;
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        
+        if (!res.ok) return;
+
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) return;
+
         const data = await res.json();
         
         if (data.code === 'Ok' && !isCancelled) {
           const coords = data.routes[0].geometry.coordinates.map((c: any) => [c[1], c[0]]);
-          const dt = data.routes[0].duration; // in seconds
+          const dt = data.routes[0].duration;
           
           let etaText = "";
           if (dt < 60) etaText = "Arriving soon";
@@ -136,8 +179,10 @@ export default function OrderTrackingMap({ orderId, customerLocation }: OrderTra
           
           setRouteData({ path: coords, etaText });
         }
-      } catch (err) {
-        console.error("Failed to fetch route", err);
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
+        // Completely silent fallback to prevent Dev Overlay
+        console.warn("Routing service temporarily limited.");
       }
     };
 
@@ -174,10 +219,21 @@ export default function OrderTrackingMap({ orderId, customerLocation }: OrderTra
               <Marker position={[riderLocation.lat, riderLocation.lng]} icon={riderIcon} />
               <UpdateMapCenter location={riderLocation} />
               {routeData && (
-                <Polyline positions={routeData.path} color="#3b82f6" weight={4} dashArray="8, 8" opacity={0.8} />
+                <Polyline 
+                  positions={routeData.path} 
+                  color="#3b82f6" 
+                  weight={5} 
+                  dashArray="12, 8" 
+                  opacity={0.9}
+                  smoothFactor={1}
+                  className="drop-shadow-lg"
+                />
               )}
             </>
           )}
+          
+          {/* Custom Zoom Controls */}
+          <ZoomControls />
         </MapContainer>
       )}
       
@@ -192,7 +248,7 @@ export default function OrderTrackingMap({ orderId, customerLocation }: OrderTra
       )}
       
       {routeData && riderLocation && (
-          <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-[#0a0a0b]/90 backdrop-blur-2xl px-8 py-5 rounded-[2rem] border border-white/10 flex flex-col items-center shadow-[0_30px_60px_rgba(0,0,0,0.6)] animate-in slide-in-from-bottom-8 duration-700 pointer-events-none min-w-[220px]" style={{ zIndex: 1000}}>
+          <div className="absolute bottom-8 left-8 transform translate-x-0 bg-[#0a0a0b]/90 backdrop-blur-2xl px-8 py-5 rounded-[2rem] border border-white/10 flex flex-col items-center shadow-[0_30px_60px_rgba(0,0,0,0.6)] animate-in slide-in-from-bottom-8 duration-700 pointer-events-none min-w-[220px]" style={{ zIndex: 1000}}>
               <div className="flex items-center gap-4">
                  <div className="flex items-center justify-center p-2.5 bg-blue-500/20 rounded-2xl ring-1 ring-blue-500/30">
                     <Timer className="w-6 h-6 text-blue-400" />

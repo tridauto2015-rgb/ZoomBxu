@@ -24,27 +24,35 @@ import { STORE_LOCATION, calculateDistance, formatCurrency } from "@/lib/utils"
 import dynamic from "next/dynamic"
 
 // Geocoding function using Nominatim (OpenStreetMap)
-const geocodeAddress = async (address: string): Promise<{lat: number, lng: number} | null> => {
+const searchAddresses = async (query: string): Promise<Array<{title: string, subtitle: string, full_name: string, lat: number, lng: number}>> => {
     try {
-        // Add Philippines context for better results
-        const searchQuery = `${address}, Philippines`;
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1&countrycodes=ph`);
+        // Add Philippines context for better results if not already present
+        const searchQuery = query.toLowerCase().includes('philippines') ? query : `${query}, Philippines`;
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=5&countrycodes=ph`);
         const data = await response.json();
         
-        if (data && data.length > 0) {
-            return {
-                lat: parseFloat(data[0].lat),
-                lng: parseFloat(data[0].lon)
-            };
+        if (data && Array.isArray(data)) {
+            return data.map(item => {
+                const parts = item.display_name.split(',');
+                const title = parts[0].trim();
+                const subtitle = parts.slice(1).join(',').replace(/, Philippines$/, '').trim();
+                return {
+                    title,
+                    subtitle: subtitle || parts[0].trim(),
+                    full_name: item.display_name.replace(/, Philippines$/, ''),
+                    lat: parseFloat(item.lat),
+                    lng: parseFloat(item.lon)
+                };
+            });
         }
-        return null;
+        return [];
     } catch (error) {
-        console.error("Geocoding error:", error);
-        return null;
+        console.error("Address search error:", error);
+        return [];
     }
 };
 
-const LocationPicker = dynamic(() => import('./location-picker'), { 
+const LocationPicker = dynamic(() => import('@/components/shared/location-picker'), { 
     ssr: false,
     loading: () => <div className="h-[250px] w-full rounded-xl flex items-center justify-center bg-muted/20 animate-pulse border border-border mt-6 text-xs text-muted-foreground uppercase tracking-widest gap-2"><MapPin className="w-4 h-4"/> Loading GPS Engine...</div>
 })
@@ -62,42 +70,56 @@ export function Cart() {
     const [phoneNumber, setPhoneNumber] = useState<string>("")
     const [addressInput, setAddressInput] = useState<string>("")
     const [isGeocoding, setIsGeocoding] = useState(false)
+    const [suggestions, setSuggestions] = useState<Array<{title: string, subtitle: string, full_name: string, lat: number, lng: number}>>([])
+    const [showSuggestions, setShowSuggestions] = useState(false)
+    const [selectedIndex, setSelectedIndex] = useState(-1)
 
     // Calculate delivery fee
     const distance = deliveryLocation 
         ? calculateDistance(STORE_LOCATION.lat, STORE_LOCATION.lng, deliveryLocation.lat, deliveryLocation.lng)
         : 0
-    const deliveryFee = distance * 5
+    
+    // Tiered pricing: P10 per km up to 200km, then P1 per km for the excess
+    const deliveryFee = distance > 200 
+        ? 2000 + (distance - 200) * 1 
+        : distance * 10
+
     const finalTotalValue = Number((getRawTotal() + deliveryFee).toFixed(2))
 
     useEffect(() => {
         setMounted(true)
     }, [])
 
-    // Debounced geocoding function
+    // Debounced geocoding function for suggestions
     useEffect(() => {
-        if (!addressInput.trim()) {
+        if (!addressInput.trim() || addressInput === locationName) {
             setIsGeocoding(false)
+            setSuggestions([])
+            setShowSuggestions(false)
+            setSelectedIndex(-1)
             return
         }
 
         const timeoutId = setTimeout(async () => {
             setIsGeocoding(true)
             try {
-                const location = await geocodeAddress(addressInput)
-                if (location) {
-                    setDeliveryLocation(location)
-                    setLocationName(addressInput)
+                const results = await searchAddresses(addressInput)
+                setSuggestions(results)
+                if (results.length > 0) {
+                    setShowSuggestions(true)
+                    setSelectedIndex(0) // Default highlight first
+                } else {
+                    setShowSuggestions(false)
                 }
             } catch (error) {
                 console.error("Error searching for location:", error)
             } finally {
                 setIsGeocoding(false)
             }
-        }, 1000) // 1 second delay
+        }, 600) // Slightly faster debounce for better feel
 
         return () => clearTimeout(timeoutId)
-    }, [addressInput])
+    }, [addressInput, locationName])
 
     useEffect(() => {
         const handleOpenCart = () => {
@@ -160,6 +182,10 @@ export function Cart() {
         : 0
 
     const handleCheckout = async () => {
+        // Play ATM sound effect
+        const audio = new Audio('/sounds/checkout-click.mp3')
+        audio.play().catch(e => console.error("Audio playback failed:", e))
+
         if (!isAuthenticated) {
             toast.error("Please login to proceed with checkout")
             return
@@ -352,10 +378,7 @@ export function Cart() {
                                             
                                             <label className="text-[10px] font-black uppercase tracking-[0.15em] text-foreground/80">Contact Number</label>
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse"></div>
-                                            <span className="text-[8px] font-medium text-green-600">Verified contact</span>
-                                        </div>
+
                                     </div>
                                     <div className="relative group/input">
                                         {/* Animated border effect */}
@@ -410,17 +433,7 @@ export function Cart() {
                                             </div>
                                         </div>
                                         
-                                        {/* Floating helper text */}
-                                        <div className="absolute -bottom-7 left-0 right-0 flex justify-between opacity-0 group-focus-within/input:opacity-100 transition-all duration-300">
-                                            <span className="text-[8px] font-medium text-slate-500 dark:text-slate-400">
-                                                {phoneNumber.length === 0 ? "Enter your mobile number" : 
-                                                 phoneNumber.length < 10 ? `${10 - phoneNumber.length} more digits` : 
-                                                 "Number complete ✓"}
-                                            </span>
-                                            <span className="text-[8px] font-mono text-slate-400 dark:text-slate-500">
-                                                {phoneNumber.length > 0 ? `${phoneNumber.slice(0, 3)} ${phoneNumber.slice(3, 6)} ${phoneNumber.slice(6)}` : "9XX XXX XXXX"}
-                                            </span>
-                                        </div>
+
                                         
                                         {/* Corner decorations */}
                                         <div className="absolute top-1 left-1 w-2 h-2 border-t border-l border-primary/30 rounded-tl-sm opacity-0 group-hover/input:opacity-100 transition-opacity duration-300"></div>
@@ -430,28 +443,166 @@ export function Cart() {
                                     </div>
                                 </div>
 
-                                <div className="flex items-center justify-between group cursor-pointer mb-2">
-                                    <h4 className="font-black text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                                        <MapPin className="h-3 w-3 text-primary" />
-                                        Location
-                                    </h4>
-                                    <div className="relative flex items-center gap-2">
-                                        {isGeocoding && (
-                                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                                <div className="space-y-4 mb-5">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <label className="text-[10px] font-black uppercase tracking-[0.15em] text-foreground/80">Delivery Address</label>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className={cn("w-1 h-1 rounded-full animate-pulse", deliveryLocation && addressInput === locationName ? "bg-green-500" : "bg-primary")}></div>
+                                            <span className={cn("text-[8px] font-medium", deliveryLocation && addressInput === locationName ? "text-green-600" : "text-primary")}>
+                                                {deliveryLocation && addressInput === locationName ? "Location pinned" : "Awaiting sync"}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="relative group/input">
+                                        {/* Animated border effect */}
+                                        <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary via-purple-500 to-pink-500 opacity-0 group-hover/input:opacity-20 transition-opacity duration-500 blur-xl"></div>
+                                        
+                                        {/* Main input container */}
+                                        <div className="relative bg-gradient-to-br from-slate-50/80 to-white/90 dark:from-slate-900/80 dark:to-slate-800/90 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-lg group-hover/input:shadow-xl transition-all duration-300 overflow-hidden">
+                                            {/* Top decorative line */}
+                                            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-0 group-hover/input:opacity-100 transition-opacity duration-500"></div>
+                                            
+                                            {/* Icon section prefix */}
+                                            <div className="absolute left-0 top-0 bottom-0 flex items-center justify-center w-14 bg-gradient-to-r from-primary/8 via-primary/4 to-transparent border-r border-slate-200/40 dark:border-slate-700/40">
+                                                <div className="flex flex-col items-center">
+                                                    <MapPin className="h-4 w-4 text-primary/90" />
+                                                    <div className="w-4 h-px bg-primary/20 mt-1"></div>
+                                                </div>
+                                            </div>
+                                            
+                                            <input 
+                                                type="text"
+                                                value={addressInput}
+                                                onChange={(e) => {
+                                                    setAddressInput(e.target.value)
+                                                    setShowSuggestions(true)
+                                                    if (!isGeocoding) setIsGeocoding(true)
+                                                }}
+                                                onFocus={() => {
+                                                    if (suggestions.length > 0) setShowSuggestions(true)
+                                                }}
+                                                onBlur={() => {
+                                                    // Delay hiding to allow suggested item click to register
+                                                    setTimeout(() => setShowSuggestions(false), 200)
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    if (!showSuggestions || suggestions.length === 0) return
+                                                    
+                                                    if (e.key === 'ArrowDown') {
+                                                        e.preventDefault()
+                                                        setSelectedIndex(prev => (prev + 1) % suggestions.length)
+                                                    } else if (e.key === 'ArrowUp') {
+                                                        e.preventDefault()
+                                                        setSelectedIndex(prev => (prev - 1 + suggestions.length) % suggestions.length)
+                                                    } else if (e.key === 'Enter' && selectedIndex >= 0) {
+                                                        e.preventDefault()
+                                                        const selected = suggestions[selectedIndex]
+                                                        setAddressInput(selected.full_name)
+                                                        setLocationName(selected.full_name)
+                                                        setDeliveryLocation({ lat: selected.lat, lng: selected.lng })
+                                                        setShowSuggestions(false)
+                                                    } else if (e.key === 'Escape') {
+                                                        setShowSuggestions(false)
+                                                    }
+                                                }}
+                                                placeholder="Click map or type here..."
+                                                className="w-full h-12 bg-transparent pl-16 pr-14 text-sm font-medium tracking-[0.02em] placeholder:text-slate-400/60 dark:placeholder:text-slate-500/60 focus:outline-none transition-all duration-300"
+                                            />
+                                            
+                                            {/* Right side indicators */}
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                                                {isGeocoding ? (
+                                                    <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                                                ) : deliveryLocation && addressInput === locationName ? (
+                                                    <div className="flex items-center gap-1 animate-in slide-in-from-right duration-300">
+                                                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                                                    </div>
+                                                ) : null}
+                                                <div className="w-2 h-2 rounded-full bg-gradient-to-r from-primary to-purple-500 opacity-60 group-focus-within/input:opacity-100 transition-opacity duration-300"></div>
+                                            </div>
+                                            
+                                            {/* Bottom progress bar */}
+                                            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-slate-100 dark:bg-slate-800">
+                                                <div 
+                                                    className="h-full bg-gradient-to-r from-primary to-purple-500 transition-all duration-300 rounded-full"
+                                                    style={{ width: addressInput.length > 5 ? '100%' : `${addressInput.length * 15}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Dropdown Suggestions */}
+                                        {showSuggestions && suggestions.length > 0 && (
+                                            <div className="absolute top-full left-0 right-0 mt-2 z-[60] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/50 dark:border-slate-700/50 shadow-2xl rounded-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
+                                                <ScrollArea className="max-h-[280px]">
+                                                    <div className="p-1.5 flex flex-col gap-1">
+                                                        {suggestions.map((suggestion, index) => (
+                                                            <button
+                                                                key={index}
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    setAddressInput(suggestion.full_name)
+                                                                    setLocationName(suggestion.full_name)
+                                                                    setDeliveryLocation({ lat: suggestion.lat, lng: suggestion.lng })
+                                                                    setShowSuggestions(false)
+                                                                }}
+                                                                onMouseEnter={() => setSelectedIndex(index)}
+                                                                className={cn(
+                                                                    "w-full text-left px-4 py-3 rounded-xl transition-all duration-200 flex items-start gap-3 group",
+                                                                    selectedIndex === index 
+                                                                        ? "bg-primary/10 dark:bg-primary/20" 
+                                                                        : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                                                                )}
+                                                            >
+                                                                <div className={cn(
+                                                                    "mt-0.5 p-1.5 rounded-lg transition-colors",
+                                                                    selectedIndex === index 
+                                                                        ? "bg-primary text-white" 
+                                                                        : "bg-slate-100 dark:bg-slate-800 text-slate-400 group-hover:text-primary group-hover:bg-primary/10"
+                                                                )}>
+                                                                    <MapPin className="h-3.5 w-3.5" />
+                                                                </div>
+                                                                <div className="flex flex-col min-w-0">
+                                                                    <span className={cn(
+                                                                        "font-bold text-sm truncate",
+                                                                        selectedIndex === index ? "text-primary" : "text-slate-700 dark:text-slate-200"
+                                                                    )}>
+                                                                        {suggestion.title}
+                                                                    </span>
+                                                                    <span className="text-[11px] text-slate-400 dark:text-slate-500 line-clamp-1 mt-0.5">
+                                                                        {suggestion.subtitle}
+                                                                    </span>
+                                                                </div>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </ScrollArea>
+                                                <div className="px-4 py-2 bg-slate-50/50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-700/50 flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <kbd className="px-1.5 py-0.5 rounded border border-slate-300 dark:border-slate-600 text-[9px] font-sans text-slate-500 bg-white dark:bg-slate-900 shadow-sm">↵</kbd>
+                                                        <span className="text-[9px] text-slate-400 font-medium">to select</span>
+                                                    </div>
+                                                    <span className="text-[9px] text-slate-400 font-medium italic">Powered by OpenStreetMap</span>
+                                                </div>
+                                            </div>
                                         )}
-                                        <input
-                                            type="text"
-                                            value={addressInput}
-                                            onChange={(e) => setAddressInput(e.target.value)}
-                                            placeholder="Enter delivery address..."
-                                            className="text-[9px] font-black text-blue-500 uppercase tracking-tighter max-w-[180px] text-right bg-transparent border-none outline-none placeholder:text-blue-500/40"
-                                        />
+
+                                        {/* Corner decorations */}
+                                        <div className="absolute top-1 left-1 w-2 h-2 border-t border-l border-primary/30 rounded-tl-sm opacity-0 group-hover/input:opacity-100 transition-opacity duration-300"></div>
+                                        <div className="absolute top-1 right-1 w-2 h-2 border-t border-r border-primary/30 rounded-tr-sm opacity-0 group-hover/input:opacity-100 transition-opacity duration-300"></div>
+                                        <div className="absolute bottom-1 left-1 w-2 h-2 border-b border-l border-primary/30 rounded-bl-sm opacity-0 group-hover/input:opacity-100 transition-opacity duration-300"></div>
+                                        <div className="absolute bottom-1 right-1 w-2 h-2 border-b border-r border-primary/30 rounded-br-sm opacity-0 group-hover/input:opacity-100 transition-opacity duration-300"></div>
                                     </div>
                                 </div>
                                 <div className="rounded-2xl overflow-hidden border border-border/80 shadow-sm bg-background ring-offset-background transition-all focus-within:ring-2 focus-within:ring-primary/20">
                                     <LocationPicker 
                                         onLocationSelect={setDeliveryLocation} 
-                                        onAddressResolve={(addr) => setLocationName(addr)}
+                                        onAddressResolve={(addr) => {
+                                            setLocationName(addr)
+                                            setAddressInput(addr)
+                                        }}
                                         defaultLocation={deliveryLocation || undefined} 
                                     />
                                 </div>
@@ -473,7 +624,9 @@ export function Cart() {
                                 <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
                                     <div className="flex items-center gap-1.5">
                                         <span>Delivery Fee</span>
-                                        <span className="text-[9px] opacity-60 font-mono">(₱5.00/km)</span>
+                                        <span className="text-[9px] opacity-60 font-mono">
+                                            ({distance > 200 ? "₱1/km excess" : "₱10/km"})
+                                        </span>
                                     </div>
                                     <span className={cn(!deliveryLocation && "opacity-20")}>
                                         {formatCurrency(deliveryFee)}
@@ -481,7 +634,7 @@ export function Cart() {
                                 </div>
                                 <Separator className="bg-border/50" />
                                 <div className="flex items-center justify-between text-xl font-black pt-1">
-                                    <span className="tracking-tight">Grand Total</span>
+                                    <span className="tracking-tight">Total</span>
                                     <span className="text-primary drop-shadow-sm">{formatCurrency(finalTotalValue)}</span>
                                 </div>
                             </div>
@@ -500,7 +653,7 @@ export function Cart() {
                                         ? `Restricted (${remainingTime}m)` 
                                         : !deliveryLocation 
                                             ? "Select Location First" 
-                                            : "Dispatch Order"}
+                                            : "Checkout"}
                                 </Button>
                             </SheetFooter>
                         </div>

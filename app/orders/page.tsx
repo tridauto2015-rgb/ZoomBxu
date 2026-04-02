@@ -1,6 +1,6 @@
-import { Header } from "@/components/header"
-import { Footer } from "@/components/footer"
-import { OrdersPageContent } from "@/components/orders-page-content"
+import { Header } from "@/components/layout/header"
+import { Footer } from "@/components/layout/footer"
+import { OrdersPageContent } from "@/components/store/orders-page-content"
 
 export default function OrdersPage() {
     return (

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Product } from "./product-card"
+import { Product } from "@/components/store/product-card"
 import { X, Save, Upload } from "lucide-react"
 import { useRef } from "react"
 import { supabase } from "@/lib/supabase"

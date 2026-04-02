@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react"
-import { Product } from "@/components/product-card"
+import { Product } from "@/components/store/product-card"
 import { supabase } from "@/lib/supabase"
 
 interface ProductsContextType {

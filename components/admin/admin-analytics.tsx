@@ -44,7 +44,7 @@ export function AdminAnalytics() {
     const validOrders = useMemo(() => orders.filter(o => o.status !== 'cancelled'), [orders])
     const totalOrdersCount = validOrders.length
 
-    const totalRevenue = useMemo(() => validOrders.reduce((sum, o) => sum + (Number(o.total_price) || 0), 0), [validOrders])
+    const totalRevenue = useMemo(() => orders.filter(o => o.status === 'completed').reduce((sum, o) => sum + (Number(o.total_price) || 0), 0), [orders])
 
     // --- Chart Data Computations ---
     
@@ -58,7 +58,9 @@ export function AdminAnalytics() {
                 grouped[dateStr] = { date: dateStr, orders: 0, revenue: 0 }
             }
             grouped[dateStr].orders += 1
-            grouped[dateStr].revenue += (Number(order.total_price) || 0)
+            if (order.status === 'completed') {
+                grouped[dateStr].revenue += (Number(order.total_price) || 0)
+            }
         })
 
         // Sort by date realistically (assuming recent data, sorting by string might be imperfect for cross-year, but good enough for short ranges)

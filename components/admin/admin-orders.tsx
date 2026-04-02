@@ -7,7 +7,7 @@ import { toast } from "sonner"
 import { cn, formatCurrency, calculateDistance, STORE_LOCATION } from "@/lib/utils"
 import dynamic from "next/dynamic"
 
-const OrderTrackingMap = dynamic(() => import('./order-tracking-map'), { 
+const OrderTrackingMap = dynamic(() => import('@/components/shared/order-tracking-map'), { 
     ssr: false,
     loading: () => <div className="h-[200px] w-full mt-4 flex items-center justify-center bg-muted/20 animate-pulse border border-border rounded-xl text-xs text-muted-foreground uppercase tracking-widest">Loading Admin Viewer...</div>
 })
@@ -155,6 +155,7 @@ function showDeleteToast() {
 interface Order {
     id: string
     created_at: string
+    user_id?: string
     customer_name: string
     customer_phone: string
     items: any[]
@@ -163,7 +164,6 @@ interface Order {
     customer_lat?: number
     customer_lng?: number
     location_name?: string
-    user_id?: string
 }
 
 export function AdminOrders() {
@@ -250,9 +250,22 @@ export function AdminOrders() {
             },
             (error) => {
                 toast.dismiss(loadToast)
-                toast.error("Could not verify your location. Ensure GPS/location is enabled.")
+                console.warn("Geolocation failed:", error)
+                
+                // Allow manual override if GPS fails
+                const force = confirm("Could not verify your location via GPS. (Ensure your browser allows location access).\n\nWould you like to BYPASS the proximity check and mark this order as completed anyway?")
+                
+                if (force) {
+                    if (broadcastingOrderId === orderId && watchIdRef.current !== null) {
+                        navigator.geolocation.clearWatch(watchIdRef.current)
+                        setBroadcastingOrderId(null)
+                    }
+                    updateStatus(orderId, 'completed')
+                } else {
+                    toast.error("Proximity verification failed. Check browser permissions (lock icon in address bar).")
+                }
             },
-            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 } // Softer requirements for better success rate
         )
     }
 
@@ -367,7 +380,28 @@ export function AdminOrders() {
                 showStatusToast('processing')
                 fetchOrders()
 
-                // 3. Auto-open map and start broadcasting
+                // 3. Automated Message to Customer
+                const order = orders.find(o => o.id === orderId)
+                if (order) {
+                    const recipientId = order.user_id || order.customer_phone
+                    
+                    let etaText = "Arriving soon"
+                    if (order.customer_lat && order.customer_lng) {
+                        const dist = calculateDistance(lat, lng, order.customer_lat, order.customer_lng)
+                        const mins = Math.ceil((dist / 30) * 60) + 5 // 30km/h average + 5m buffer
+                        etaText = `~${mins} mins`
+                    }
+
+                    await supabase.from('messages').insert([{
+                        content: `Delivery: The rider is now heading to your location.\nOrder ID: #${orderId.substring(0, 8).toUpperCase()}\nEstimated Arrival: ${etaText}`,
+                        sender_id: 'admin',
+                        sender_name: 'Admin',
+                        is_admin: true,
+                        recipient_id: recipientId
+                    }])
+                }
+
+                // 4. Auto-open map and start broadcasting
                 setViewingMapId(orderId)
                 
                 if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current)
@@ -389,14 +423,34 @@ export function AdminOrders() {
                     { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
                 )
             },
-            (error) => {
+            async (error) => {
                 toast.dismiss(loadToast)
-                toast.error("Location permission denied/failed. Cannot initiate delivery without live tracking active.", { 
-                    duration: 6000,
-                    style: { background: '#f87171', color: 'white' }
-                })
+                console.warn("GPS acquisition failed:", error)
+                
+                const force = confirm("Could not acquire your current location for live tracking.\n\nWould you like to BYPASS the tracking initialization and start the delivery manually?")
+                
+                if (force) {
+                    // Set order to processing without tracking
+                    updateStatus(orderId, 'processing')
+                    setViewingMapId(orderId)
+
+                    // Automated Message to Customer (Bypass case)
+                    const order = orders.find(o => o.id === orderId)
+                    if (order) {
+                        const recipientId = order.user_id || order.customer_phone
+                        await supabase.from('messages').insert([{
+                            content: `Delivery: The rider is now heading to your location.\nOrder ID: #${orderId.substring(0, 8).toUpperCase()}\nEstimated Arrival: Arriving soon`,
+                            sender_id: 'admin',
+                            sender_name: 'Admin',
+                            is_admin: true,
+                            recipient_id: recipientId
+                        }])
+                    }
+                } else {
+                    toast.error("Location permission failed. Cannot initiate live tracking.")
+                }
             },
-            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 }
         )
     }
 
@@ -712,7 +766,7 @@ export function AdminOrders() {
                                                                 >
                                                                     <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300" />
                                                                     <div className="relative flex items-center justify-center gap-3">
-                                                                        <Zap className="h-4 w-4 fill-black" />
+                                                                        <Zap className="h-4 w-4 fill-white" />
                                                                         Initiate Delivery
                                                                     </div>
                                                                 </button>
@@ -772,7 +826,7 @@ export function AdminOrders() {
                                                         <div className="relative border border-border/80 rounded-2xl overflow-hidden shadow-sm bg-card group/map">
                                                             {/* Live Broadcast Toggle Overlay */}
                                                             {order.status === 'processing' && (
-                                                                <div className="absolute top-3 right-3 z-[1000]">
+                                                                <div className="absolute top-4 left-4 z-[1000]">
                                                                     <button
                                                                         onClick={() => toggleBroadcastLocation(order.id)}
                                                                         className={cn(
