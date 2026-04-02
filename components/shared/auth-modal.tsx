@@ -126,10 +126,13 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
         setIsLoading(true)
         setError(null)
         try {
+            // Get current origin or fallback to production URL if window is undefined or for some cases
+            const origin = typeof window !== 'undefined' ? window.location.origin : 'https://zoombxusurplus.vercel.app'
+            
             const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: window.location.origin,
+                    redirectTo: `${origin}/`,
                     queryParams: {
                         prompt: 'select_account',
                     }

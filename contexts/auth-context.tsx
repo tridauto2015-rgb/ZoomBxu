@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react"
 import { supabase } from "@/lib/supabase"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
+import { toast } from "sonner"
 
 interface User {
     name: string
@@ -38,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
 
         // Listen for auth state changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             if (session?.user) {
                 setSupabaseUser(session.user)
                 setUser({
@@ -46,6 +47,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     phone: session.user.user_metadata.phone || session.user.phone || session.user.email || "",
                     email: session.user.email || "",
                 })
+
+                // Clean up URL hash after successful OAuth login
+                if (event === 'SIGNED_IN' && typeof window !== 'undefined' && window.location.hash) {
+                    // Check if the hash contains access_token to avoid clearing unrelated hashes
+                    if (window.location.hash.includes('access_token=')) {
+                        const url = new URL(window.location.href);
+                        url.hash = '';
+                        window.history.replaceState({}, document.title, url.toString());
+                        toast.success(`Welcome back, ${session.user.user_metadata.full_name || session.user.user_metadata.name || "User"}!`)
+                    }
+                }
+            } else if (event === 'SIGNED_OUT') {
+                setSupabaseUser(null)
+                setUser(null)
             } else {
                 setSupabaseUser(null)
                 setUser(null)
