@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabase"
-import { MessageSquare, Send, User, Loader2, Search, Trash2 } from "lucide-react"
+import { MessageSquare, Send, User, Loader2, Search, Trash2, ArrowLeft, TerminalSquare } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
@@ -41,19 +41,13 @@ export function AdminChat({ initialSessionId }: { initialSessionId?: string | nu
                 fetchSessions()
                 if (activeSession && (msg.sender_id === activeSession || msg.recipient_id === activeSession)) {
                     setMessages((prev) => {
-                        // 1. Prevent exact duplicate by UUID
                         if (prev.some(m => m.id === msg.id)) return prev;
-                        
-                        // 2. Identify if this is a server-confirmation of a local 'temp' message
-                        // We check for matching content and that the local one is a 'temp-' ID
                         const tempIdx = prev.findIndex(m => m.id?.startsWith('temp-') && m.content === msg.content);
-                        
                         if (tempIdx !== -1) {
                             const updated = [...prev];
-                            updated[tempIdx] = msg; // Swap temp for real UUID from server
+                            updated[tempIdx] = msg;
                             return updated;
                         }
-                        
                         return [...prev, msg];
                     });
                 }
@@ -63,7 +57,7 @@ export function AdminChat({ initialSessionId }: { initialSessionId?: string | nu
                     console.log(`Subscribed to admin messages channel.`)
                 }
                 if (status === 'CHANNEL_ERROR') {
-                    console.warn("Real-time for admin failed. Please check if 'Realtime' is enabled for 'messages' table in Supabase project dashboard.")
+                    console.warn("Real-time for admin failed.")
                 }
             })
         return () => { supabase.removeChannel(channel) }
@@ -88,9 +82,7 @@ export function AdminChat({ initialSessionId }: { initialSessionId?: string | nu
             .order('created_at', { ascending: false })
             
         if (data) {
-            // Priority 1: UUID string, Priority 2: Phone number, Priority 3: anonymous/other
             const isUUID = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-
             const idGroupMap: Record<string, ChatSession> = {}
             
             data.forEach((msg: any) => {
@@ -122,11 +114,9 @@ export function AdminChat({ initialSessionId }: { initialSessionId?: string | nu
                     finalSessionsMap[mergeKey] = session;
                 } else {
                     const existing = finalSessionsMap[mergeKey];
-                    // Pick the best ID: UUID wins over anything else
                     if (!isUUID(existing.sender_id) && isUUID(session.sender_id)) {
                         existing.sender_id = session.sender_id;
                     }
-                    // Keep most recent activity
                     if (new Date(session.last_active) > new Date(existing.last_active)) {
                         existing.last_active = session.last_active;
                         existing.last_message = session.last_message;
@@ -161,9 +151,8 @@ export function AdminChat({ initialSessionId }: { initialSessionId?: string | nu
         if (!newMessage.trim() || !activeSession) return
         const content = newMessage
         setNewMessage("")
-        // Optimistic UI for admin
         const msgObj: Message = {
-            id: 'temp-' + Math.random().toString(), // Use temp prefix for local 
+            id: 'temp-' + Math.random().toString(),
             created_at: new Date().toISOString(),
             content,
             sender_id: 'admin',
@@ -172,27 +161,19 @@ export function AdminChat({ initialSessionId }: { initialSessionId?: string | nu
             recipient_id: activeSession,
         }
         setMessages(prev => [...prev, msgObj])
-        fetchSessions() // Update sidebar immediately
-
-        // Prepare object for Supabase (Omit the temp ID to avoid UUID type error)
+        fetchSessions()
         const { id, ...supabaseData } = msgObj;
-
         const { error } = await supabase.from('messages').insert([supabaseData])
         if (error) {
             console.error("Admin Send Error:", error)
             toast.error(`Failed to send: ${error.message}`)
-            setMessages(prev => prev.filter(m => m.id !== msgObj.id)) // Rollback
+            setMessages(prev => prev.filter(m => m.id !== msgObj.id))
         }
     }
 
     const handleDeleteMessage = async (messageId: string) => {
         if (!confirm("Are you sure you want to delete this message?")) return
-        
-        const { error } = await supabase
-            .from('messages')
-            .delete()
-            .eq('id', messageId)
-        
+        const { error } = await supabase.from('messages').delete().eq('id', messageId)
         if (error) {
             toast.error("Failed to delete message")
         } else {
@@ -207,134 +188,161 @@ export function AdminChat({ initialSessionId }: { initialSessionId?: string | nu
     )
 
     return (
-        <div className="chat-wrap">
-            {/* Sidebar */}
-            <div className="chat-sidebar">
-                <div className="chat-sidebar-head">
-                    <h3 className="chat-sidebar-title">
-                        <MessageSquare className="h-4 w-4" />
-                        Customer Chats
+        <div className="flex flex-col md:flex-row h-[calc(100vh-200px)] md:h-[calc(100vh-120px)] my-[10px] md:my-0 max-h-[850px] border border-white/5 bg-[#0f1117] shadow-2xl relative overflow-hidden rounded-xl">
+            
+            {/* Sidebar (List View) */}
+            <div className={cn(
+                "w-full md:w-[320px] shrink-0 border-r border-white/5 flex flex-col bg-[#181c27]",
+                activeSession ? "hidden md:flex" : "flex h-full"
+            )}>
+                {/* Header & Search */}
+                <div className="p-4 border-b border-white/5 bg-[#11141d] flex flex-col gap-4 sticky top-0 z-10">
+                    <h3 className="flex items-center gap-2 font-black text-white text-sm tracking-widest uppercase">
+                        <TerminalSquare className="w-4 h-4 text-[#f4a732]" />
+                        Active Chats
                     </h3>
-                    <div className="chat-search-wrap">
-                        <Search className="chat-search-icon h-3.5 w-3.5" />
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
                         <input
                             type="text"
-                            placeholder="Search customer…"
-                            className="chat-search-input"
+                            placeholder="Query database..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full bg-[#0a0a0b] border border-white/10 text-white text-xs pl-9 pr-3 py-2.5 rounded-sm outline-none focus:ring-0 focus:border-[#f4a732] transition-colors"
                         />
                     </div>
                 </div>
 
-                <div className="chat-session-list">
+                {/* Session List */}
+                <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-white/10 relative">
+                    <div className="absolute left-0 top-0 bottom-0 w-[1px] bg-gradient-to-b from-transparent via-[#f4a732]/20 to-transparent" />
                     {filteredSessions.length === 0 ? (
-                        <div className="chat-empty-sidebar">
-                            <p>No active chats found.</p>
+                        <div className="p-8 text-center flex flex-col items-center">
+                            <TerminalSquare className="w-8 h-8 text-slate-700 mb-3" />
+                            <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold">No Records Found</p>
                         </div>
                     ) : (
-                        filteredSessions.map((session) => (
-                            <button
-                                key={session.sender_id}
-                                onClick={() => handleSelectSession(session.sender_id)}
-                                className={cn(
-                                    "chat-session-btn",
-                                    activeSession === session.sender_id && "chat-session-btn--active"
-                                )}
-                            >
-                                <div className="chat-avatar">
-                                    <User className="h-4 w-4" />
-                                </div>
-                                <div className="chat-session-info">
-                                    <div className="chat-session-top">
-                                        <span className="chat-session-name">{session.sender_name}</span>
-                                        <span className="chat-session-time">
-                                            {new Date(session.last_active).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
+                        <div className="flex flex-col divide-y divide-white/5">
+                            {filteredSessions.map((session) => (
+                                <button
+                                    key={session.sender_id}
+                                    onClick={() => handleSelectSession(session.sender_id)}
+                                    className={cn(
+                                        "w-full text-left p-4 hover:bg-white/[0.02] transition-colors group relative flex items-start gap-3",
+                                        activeSession === session.sender_id && "bg-[#f4a732]/[0.05] border-r-2 border-[#f4a732]"
+                                    )}
+                                >
+                                    <div className="w-8 h-8 shrink-0 bg-[#f4a732]/10 border border-[#f4a732]/20 flex items-center justify-center text-[#f4a732] group-hover:scale-105 transition-transform">
+                                        <User className="w-4 h-4" />
                                     </div>
-                                    <p className="chat-session-preview">{session.last_message}</p>
-                                </div>
-                            </button>
-                        ))
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-baseline mb-1">
+                                            <span className="font-bold text-sm text-white truncate pr-2">{session.sender_name}</span>
+                                            <span className="text-[9px] text-slate-500 font-bold whitespace-nowrap tracking-wider">
+                                                {new Date(session.last_active).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-slate-400 truncate w-full">{session.last_message}</p>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
                     )}
                 </div>
             </div>
 
-            {/* Chat area */}
-            <div className="chat-main">
+            {/* Chat Thread Area */}
+            <div className={cn(
+                "flex-1 flex flex-col min-w-0 bg-[#0f1117]",
+                !activeSession ? "hidden md:flex" : "flex h-full"
+            )}>
                 {activeSession ? (
                     <>
-                        {/* Chat header */}
-                        <div className="chat-main-head">
-                            <div className="chat-avatar">
-                                <User className="h-4 w-4" />
+                        {/* Chat Header */}
+                        <div className="flex items-center gap-3 p-4 border-b border-white/5 bg-[#181c27]">
+                            <button 
+                                onClick={() => setActiveSession(null)} 
+                                className="md:hidden p-2 -ml-2 text-slate-400 hover:text-white"
+                            >
+                                <ArrowLeft className="w-5 h-5" />
+                            </button>
+                            <div className="w-8 h-8 shrink-0 bg-[#1e2336] border border-white/10 flex items-center justify-center text-slate-400">
+                                <User className="w-4 h-4" />
                             </div>
-                            <div>
-                                <p className="chat-main-name">
+                            <div className="flex flex-col min-w-0">
+                                <span className="font-bold text-sm text-white truncate">
                                     {sessions.find((s) => s.sender_id === activeSession)?.sender_name}
-                                </p>
-                                <p className="chat-main-id">ID: {activeSession}</p>
+                                </span>
+                                <span className="text-[9px] text-slate-500 uppercase tracking-widest font-mono truncate">
+                                    ID: {activeSession.substring(0, 8)}...
+                                </span>
                             </div>
                         </div>
 
-                        {/* Messages */}
-                        <div className="chat-messages">
+                        {/* Messages Area */}
+                        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 scrollbar-thin scrollbar-thumb-white/10 bg-[#0a0a0b] relative">
+                            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white/[0.02] to-transparent pointer-events-none" />
                             {isLoading ? (
-                                <div className="chat-loading">
-                                    <Loader2 className="h-6 w-6 animate-spin" style={{ color: 'var(--adm-amber)' }} />
+                                <div className="flex-1 flex items-center justify-center">
+                                    <Loader2 className="w-6 h-6 animate-spin text-[#f4a732]" />
                                 </div>
                             ) : (
                                 messages.map((msg) => (
                                     <div
                                         key={msg.id}
-                                        className={cn("chat-msg", msg.is_admin ? "chat-msg--admin" : "chat-msg--customer")}
+                                        className={cn("flex flex-col max-w-[85%] md:max-w-[75%] relative z-10", msg.is_admin ? "ml-auto items-end" : "items-start")}
                                     >
-                                        <div className={cn("chat-bubble", msg.is_admin ? "chat-bubble--admin" : "chat-bubble--customer")}>
-                                            <div className="chat-bubble-content">
+                                        <div className={cn(
+                                            "p-3 text-sm relative group rounded-sm border",
+                                            msg.is_admin 
+                                                ? "bg-[#f4a732] text-black border-[#f4a732] rounded-br-none" 
+                                                : "bg-[#181c27] text-[#e8eaf0] border-white/10 rounded-bl-none"
+                                        )}>
+                                            <div className="font-medium whitespace-pre-wrap break-words min-w-0 leading-relaxed">
                                                 {(() => {
                                                     const lines = msg.content.split('\n');
-                                                    
                                                     return (
-                                                        <div className="space-y-1 w-full overflow-hidden">
+                                                        <div className="space-y-1 overflow-hidden">
                                                             {lines.map((line, idx) => {
                                                                 const isHeader = line.includes("I would like to checkout");
                                                                 const isSummaryLine = line.includes("(x") && line.includes("- ₱");
                                                                 const isFeeLine = line.includes("Fee):") || line.includes("Delivery Fee:");
                                                                 const isImageLabel = line.endsWith(":");
 
-                                                                if (isHeader) return <p key={idx} className="font-bold border-b border-white/10 pb-1 mb-2 text-[10px] uppercase tracking-widest opacity-80">{line}</p>;
+                                                                if (isHeader) return <p key={idx} className={cn("font-black border-b pb-1 mb-2 text-[10px] uppercase tracking-[0.15em]", msg.is_admin ? "border-black/20 text-black/80" : "border-white/10 text-white/80")}>{line}</p>;
                                                                 
                                                                 if (line.match(/https?:\/\/\S+\.(?:png|jpg|jpeg|gif|webp)/i)) {
                                                                     const url = line.match(/https?:\/\/\S+/i)?.[0];
                                                                     return (
-                                                                        <div key={idx} className="mt-2 relative overflow-hidden rounded-lg border border-white/5 bg-black/5">
-                                                                            <img src={url} alt="Order attachment" className="chat-bubble-img h-auto max-w-full rounded-lg object-contain m-0" />
+                                                                        <div key={idx} className="mt-2 p-1 bg-black/10 border border-black/5 rounded-sm">
+                                                                            <img src={url} alt="Attachment" className="max-w-[200px] h-auto object-contain rounded-sm" />
                                                                         </div>
                                                                     );
                                                                 }
 
-                                                                if (isSummaryLine) return <div key={idx} className="flex justify-between items-center bg-white/5 border border-white/5 px-2 py-1 rounded text-[11px] font-mono"><span className="opacity-80 truncate mr-2">{line.split('-')[0]}</span><span className="font-bold">{line.split('-')[1]}</span></div>;
-                                                                if (isFeeLine) return <div key={idx} className="text-[10px] font-black uppercase tracking-tighter opacity-50 mt-1 text-right">{line}</div>;
-                                                                if (isImageLabel) return <p key={idx} className="text-[9px] font-black uppercase tracking-[0.2em] mt-3 mb-1 opacity-40">{line}</p>;
+                                                                if (isSummaryLine) return <div key={idx} className={cn("flex justify-between items-center px-2 py-1 rounded-sm text-[10px] md:text-xs font-mono font-bold mt-1", msg.is_admin ? "bg-black/10" : "bg-white/5 border border-white/5")}><span className="opacity-80 truncate mr-2">{line.split('-')[0]}</span><span>{line.split('-')[1]}</span></div>;
+                                                                if (isFeeLine) return <div key={idx} className={cn("text-[9px] font-black uppercase tracking-widest mt-2 px-1", msg.is_admin ? "text-right" : "text-right text-slate-400")}>{line}</div>;
+                                                                if (isImageLabel) return <p key={idx} className={cn("text-[9px] font-black uppercase tracking-[0.2em] mt-3 mb-1", msg.is_admin ? "text-black/60" : "text-white/40")}>{line}</p>;
                                                                 
-                                                                return line.trim() ? <div key={idx} className="whitespace-pre-wrap break-words min-w-0">{line}</div> : null;
+                                                                return line.trim() ? <div key={idx}>{line}</div> : null;
                                                             })}
                                                         </div>
                                                     );
                                                 })()}
                                             </div>
+
+                                            {/* Action Overlay */}
                                             {!msg.is_admin && (
                                                 <button
                                                     onClick={() => handleDeleteMessage(msg.id)}
-                                                    className="chat-delete-btn"
+                                                    className="absolute -right-8 top-2 p-1.5 bg-red-500/10 hover:bg-red-500/30 text-red-500 rounded-lg opacity-0 group-hover:opacity-100 transition-all border border-red-500/20"
                                                     aria-label="Delete message"
-                                                    title="Delete message"
                                                 >
-                                                    <Trash2 className="h-3 w-3" />
+                                                    <Trash2 className="w-3.5 h-3.5" />
                                                 </button>
                                             )}
                                         </div>
-                                        <span className="chat-msg-time">
+                                        <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-1.5 px-1">
                                             {new Date(msg.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                         </span>
                                     </div>
@@ -343,32 +351,37 @@ export function AdminChat({ initialSessionId }: { initialSessionId?: string | nu
                             <div ref={scrollRef} />
                         </div>
 
-                        {/* Input */}
-                        <form onSubmit={handleSendMessage} className="chat-input-row">
-                            <input
-                                type="text"
-                                placeholder="Type your reply…"
-                                value={newMessage}
-                                onChange={(e) => setNewMessage(e.target.value)}
-                                className="chat-input"
-                            />
+                        {/* Input Area */}
+                        <form onSubmit={handleSendMessage} className="p-3 md:p-4 border-t border-white/5 bg-[#181c27] flex items-end gap-2 relative z-10">
+                            <div className="flex-1 bg-[#0a0a0b] border border-white/10 rounded-sm focus-within:border-[#f4a732] transition-colors p-1">
+                                <textarea
+                                    value={newMessage}
+                                    onChange={(e) => setNewMessage(e.target.value)}
+                                    placeholder="Execute command or transmit message..."
+                                    className="w-full bg-transparent text-white text-xs px-3 py-2 outline-none focus:ring-0 resize-none h-10 max-h-32 min-h-10 scrollbar-thin font-medium"
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault()
+                                            handleSendMessage(e)
+                                        }
+                                    }}
+                                />
+                            </div>
                             <button
                                 type="submit"
                                 disabled={!newMessage.trim()}
-                                className="chat-send-btn"
+                                className="h-10 px-4 bg-[#f4a732] hover:bg-[#c8841a] text-black disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0 flex items-center justify-center rounded-sm"
                                 aria-label="Send"
                             >
-                                <Send className="h-4 w-4" />
+                                <Send className="w-4 h-4" />
                             </button>
                         </form>
                     </>
                 ) : (
-                    <div className="chat-placeholder">
-                        <div className="chat-placeholder-icon">
-                            <MessageSquare className="h-8 w-8" />
-                        </div>
-                        <h3 className="chat-placeholder-title">Your Inbox</h3>
-                        <p className="chat-placeholder-text">Select a customer from the left to start a conversation.</p>
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#0a0a0b] relative z-10 h-full">
+                        <TerminalSquare strokeWidth={1} className="w-16 h-16 text-[#f4a732]/20 mb-4" />
+                        <h3 className="text-white font-black uppercase tracking-widest text-sm mb-1">Communications Hub</h3>
+                        <p className="text-slate-500 text-xs font-medium">Select a node to establish connection.</p>
                     </div>
                 )}
             </div>

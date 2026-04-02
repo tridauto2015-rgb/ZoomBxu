@@ -23,6 +23,27 @@ import { STORE_LOCATION, calculateDistance, formatCurrency } from "@/lib/utils"
 
 import dynamic from "next/dynamic"
 
+// Geocoding function using Nominatim (OpenStreetMap)
+const geocodeAddress = async (address: string): Promise<{lat: number, lng: number} | null> => {
+    try {
+        // Add Philippines context for better results
+        const searchQuery = `${address}, Philippines`;
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1&countrycodes=ph`);
+        const data = await response.json();
+        
+        if (data && data.length > 0) {
+            return {
+                lat: parseFloat(data[0].lat),
+                lng: parseFloat(data[0].lon)
+            };
+        }
+        return null;
+    } catch (error) {
+        console.error("Geocoding error:", error);
+        return null;
+    }
+};
+
 const LocationPicker = dynamic(() => import('./location-picker'), { 
     ssr: false,
     loading: () => <div className="h-[250px] w-full rounded-xl flex items-center justify-center bg-muted/20 animate-pulse border border-border mt-6 text-xs text-muted-foreground uppercase tracking-widest gap-2"><MapPin className="w-4 h-4"/> Loading GPS Engine...</div>
@@ -39,6 +60,8 @@ export function Cart() {
     const [deliveryLocation, setDeliveryLocation] = useState<{lat: number, lng: number} | null>(null)
     const [locationName, setLocationName] = useState<string>("")
     const [phoneNumber, setPhoneNumber] = useState<string>("")
+    const [addressInput, setAddressInput] = useState<string>("")
+    const [isGeocoding, setIsGeocoding] = useState(false)
 
     // Calculate delivery fee
     const distance = deliveryLocation 
@@ -50,6 +73,31 @@ export function Cart() {
     useEffect(() => {
         setMounted(true)
     }, [])
+
+    // Debounced geocoding function
+    useEffect(() => {
+        if (!addressInput.trim()) {
+            setIsGeocoding(false)
+            return
+        }
+
+        const timeoutId = setTimeout(async () => {
+            setIsGeocoding(true)
+            try {
+                const location = await geocodeAddress(addressInput)
+                if (location) {
+                    setDeliveryLocation(location)
+                    setLocationName(addressInput)
+                }
+            } catch (error) {
+                console.error("Error searching for location:", error)
+            } finally {
+                setIsGeocoding(false)
+            }
+        }, 1000) // 1 second delay
+
+        return () => clearTimeout(timeoutId)
+    }, [addressInput])
 
     useEffect(() => {
         const handleOpenCart = () => {
@@ -298,30 +346,87 @@ export function Cart() {
 
                         <div className="space-y-4 pt-6 border-t border-border bg-card/50 -mx-6 px-6 pb-6">
                             <div className="space-y-4">
-                                <div className="space-y-4 mb-6">
+                                <div className="space-y-4 mb-8">
                                     <div className="flex items-center justify-between">
-                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60">Contact Number</label>
-                                        <span className="text-[10px] font-bold text-primary/60 italic">Required for dispatch</span>
+                                        <div className="flex items-center gap-3">
+                                            
+                                            <label className="text-[10px] font-black uppercase tracking-[0.15em] text-foreground/80">Contact Number</label>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-1 h-1 bg-green-500 rounded-full animate-pulse"></div>
+                                            <span className="text-[8px] font-medium text-green-600">Verified contact</span>
+                                        </div>
                                     </div>
                                     <div className="relative group/input">
-                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 pr-3 border-r border-border/50">
-                                            <span className="text-sm font-black text-muted-foreground">+63</span>
+                                        {/* Animated border effect */}
+                                        <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary via-purple-500 to-pink-500 opacity-0 group-hover/input:opacity-20 transition-opacity duration-500 blur-xl"></div>
+                                        
+                                        {/* Main input container */}
+                                        <div className="relative bg-gradient-to-br from-slate-50/80 to-white/90 dark:from-slate-900/80 dark:to-slate-800/90 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-lg group-hover/input:shadow-xl transition-all duration-300 overflow-hidden">
+                                            {/* Top decorative line */}
+                                            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-0 group-hover/input:opacity-100 transition-opacity duration-500"></div>
+                                            
+                                            {/* Country code section */}
+                                            <div className="absolute left-0 top-0 bottom-0 flex items-center justify-center w-20 bg-gradient-to-r from-primary/8 via-primary/4 to-transparent border-r border-slate-200/40 dark:border-slate-700/40">
+                                                <div className="flex flex-col items-center">
+                                                    <span className="text-xs font-bold text-primary/90">+63</span>
+                                                    <div className="w-4 h-px bg-primary/20 mt-0.5"></div>
+                                                </div>
+                                            </div>
+                                            
+                                            <input 
+                                                type="tel"
+                                                value={phoneNumber}
+                                                onChange={(e) => {
+                                                    let val = e.target.value.replace(/\D/g, '');
+                                                    while (val.length > 0 && val[0] !== '9') {
+                                                        val = val.substring(1);
+                                                    }
+                                                    setPhoneNumber(val.substring(0, 10));
+                                                }}
+                                                placeholder="9XX XXX XXXX"
+                                                maxLength={11}
+                                                className="w-full h-12 bg-transparent pl-24 pr-16 text-sm font-medium tracking-[0.02em] placeholder:text-slate-400/60 dark:placeholder:text-slate-500/60 focus:outline-none transition-all duration-300"
+                                            />
+                                            
+                                            {/* Right side indicators */}
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                                                {phoneNumber.length === 10 && (
+                                                    <div className="flex items-center gap-1 animate-in slide-in-from-right duration-300">
+                                                        <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                                        </svg>
+                                                    </div>
+                                                )}
+                                                <div className="w-2 h-2 rounded-full bg-gradient-to-r from-primary to-purple-500 opacity-60 group-focus-within/input:opacity-100 transition-opacity duration-300"></div>
+                                            </div>
+                                            
+                                            {/* Bottom progress bar */}
+                                            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-slate-100 dark:bg-slate-800">
+                                                <div 
+                                                    className="h-full bg-gradient-to-r from-primary to-purple-500 transition-all duration-300 rounded-full"
+                                                    style={{ width: `${(phoneNumber.length / 10) * 100}%` }}
+                                                ></div>
+                                            </div>
                                         </div>
-                                        <input 
-                                            type="tel"
-                                            value={phoneNumber}
-                                            onChange={(e) => {
-                                                let val = e.target.value.replace(/\D/g, '');
-                                                // PH mobile numbers always start with 9 after +63
-                                                while (val.length > 0 && val[0] !== '9') {
-                                                    val = val.substring(1);
-                                                }
-                                                setPhoneNumber(val.substring(0, 10));
-                                            }}
-                                            placeholder="9XX XXX XXXX"
-                                            maxLength={11}
-                                            className="w-full h-14 bg-muted/10 border border-border rounded-2xl pl-20 pr-4 text-sm font-black focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all outline-none group-hover/input:border-primary/20"
-                                        />
+                                        
+                                        {/* Floating helper text */}
+                                        <div className="absolute -bottom-7 left-0 right-0 flex justify-between opacity-0 group-focus-within/input:opacity-100 transition-all duration-300">
+                                            <span className="text-[8px] font-medium text-slate-500 dark:text-slate-400">
+                                                {phoneNumber.length === 0 ? "Enter your mobile number" : 
+                                                 phoneNumber.length < 10 ? `${10 - phoneNumber.length} more digits` : 
+                                                 "Number complete ✓"}
+                                            </span>
+                                            <span className="text-[8px] font-mono text-slate-400 dark:text-slate-500">
+                                                {phoneNumber.length > 0 ? `${phoneNumber.slice(0, 3)} ${phoneNumber.slice(3, 6)} ${phoneNumber.slice(6)}` : "9XX XXX XXXX"}
+                                            </span>
+                                        </div>
+                                        
+                                        {/* Corner decorations */}
+                                        <div className="absolute top-1 left-1 w-2 h-2 border-t border-l border-primary/30 rounded-tl-sm opacity-0 group-hover/input:opacity-100 transition-opacity duration-300"></div>
+                                        <div className="absolute top-1 right-1 w-2 h-2 border-t border-r border-primary/30 rounded-tr-sm opacity-0 group-hover/input:opacity-100 transition-opacity duration-300"></div>
+                                        <div className="absolute bottom-1 left-1 w-2 h-2 border-b border-l border-primary/30 rounded-bl-sm opacity-0 group-hover/input:opacity-100 transition-opacity duration-300"></div>
+                                        <div className="absolute bottom-1 right-1 w-2 h-2 border-b border-r border-primary/30 rounded-br-sm opacity-0 group-hover/input:opacity-100 transition-opacity duration-300"></div>
                                     </div>
                                 </div>
 
@@ -330,11 +435,18 @@ export function Cart() {
                                         <MapPin className="h-3 w-3 text-primary" />
                                         Location
                                     </h4>
-                                    {deliveryLocation && (
-                                        <span className="text-[9px] font-black text-blue-500 uppercase tracking-tighter max-w-[180px] truncate text-right">
-                                            {locationName || `${distance.toFixed(2)} km away`}
-                                        </span>
-                                    )}
+                                    <div className="relative flex items-center gap-2">
+                                        {isGeocoding && (
+                                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                                        )}
+                                        <input
+                                            type="text"
+                                            value={addressInput}
+                                            onChange={(e) => setAddressInput(e.target.value)}
+                                            placeholder="Enter delivery address..."
+                                            className="text-[9px] font-black text-blue-500 uppercase tracking-tighter max-w-[180px] text-right bg-transparent border-none outline-none placeholder:text-blue-500/40"
+                                        />
+                                    </div>
                                 </div>
                                 <div className="rounded-2xl overflow-hidden border border-border/80 shadow-sm bg-background ring-offset-background transition-all focus-within:ring-2 focus-within:ring-primary/20">
                                     <LocationPicker 

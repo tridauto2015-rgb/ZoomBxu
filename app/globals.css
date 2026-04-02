@@ -120,13 +120,6 @@ html {
   background: hsl(210 100% 50%);
 }
 
-/* Focus styles for keyboard navigation - important for elderly users */
-*:focus-visible {
-  outline: 3px solid hsl(210 100% 50%);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
 /* Animation classes */
 @keyframes fade-in-up {
   from {

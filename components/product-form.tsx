@@ -89,108 +89,125 @@ export function ProductForm({ product, onSave, onCancel }: ProductFormProps) {
   }
 
   return (
-    <div className="pf-wrap">
-      {/* Header */}
-      <div className="pf-header">
-        <h2 className="pf-title">
-          {product ? "Edit Product" : "Add New Product"}
+    <div className="flex flex-col w-full bg-[#0a0a0b]">
+      {/* Form Header */}
+      <div className="flex items-center justify-between p-4 md:p-6 border-b border-white/5 bg-[#181c27]">
+        <h2 className="text-sm font-black uppercase tracking-widest text-white flex items-center gap-3">
+          <span className="w-2 h-6 bg-[#f4a732] inline-block" />
+          {product ? "Edit Asset Protocol" : "Initialize New Asset"}
         </h2>
-        <button onClick={onCancel} className="pf-close-btn" aria-label="Close">
-          <X className="h-5 w-5" />
+        <button onClick={onCancel} className="p-2 text-slate-500 hover:text-white hover:rotate-90 transition-all border border-transparent hover:border-white/10" aria-label="Close">
+            <X strokeWidth={1} className="w-5 h-5" />
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="pf-body">
-        <div className="pf-grid">
+      <form onSubmit={handleSubmit} className="flex flex-col p-4 md:p-6 gap-6 md:gap-8 relative">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white/[0.01] to-transparent pointer-events-none" />
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
           {/* Product Name */}
-          <div className="pf-field pf-field--wide">
-            <label htmlFor="pf-name" className="pf-label">Product Name <span className="pf-required">*</span></label>
+          <div className="flex flex-col gap-2 md:col-span-2">
+            <label htmlFor="name" className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
+              Identity String <span className="text-[#f4a732]">*</span>
+            </label>
             <input
-              id="pf-name"
+              id="name"
               type="text"
               value={formData.name}
               onChange={(e) => handleChange("name", e.target.value)}
-              className="pf-input"
+              className="bg-[#181c27] border border-white/10 text-white p-3 text-sm focus:outline-none focus:ring-0 focus:border-[#f4a732] rounded-sm transition-colors"
               required
             />
           </div>
 
           {/* Price */}
-          <div className="pf-field">
-            <label htmlFor="pf-price" className="pf-label">Price <span className="pf-required">*</span></label>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="price" className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
+              Value Rating <span className="text-[#f4a732]">*</span>
+            </label>
             <input
-              id="pf-price"
+              id="price"
               type="text"
               value={formData.price}
               onChange={(e) => handleChange("price", e.target.value)}
-              placeholder="₱49.99"
-              className="pf-input"
+              placeholder="₱4,500.00"
+              className="bg-[#181c27] border border-white/10 text-white p-3 text-sm font-russo-one tracking-wider focus:outline-none focus:ring-0 focus:border-[#f4a732] rounded-sm transition-colors"
               required
             />
           </div>
 
           {/* Original Price */}
-          <div className="pf-field">
-            <label htmlFor="pf-originalPrice" className="pf-label">Original Price</label>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="originalPrice" className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
+              Legacy Rating
+            </label>
             <input
-              id="pf-originalPrice"
+              id="originalPrice"
               type="text"
               value={formData.originalPrice}
               onChange={(e) => handleChange("originalPrice", e.target.value)}
-              placeholder="₱69.99"
-              className="pf-input"
+              placeholder="₱5,000.00"
+              className="bg-[#181c27] border border-white/10 text-white p-3 text-sm font-russo-one tracking-wider focus:outline-none focus:ring-0 focus:border-[#f4a732] rounded-sm transition-colors"
             />
           </div>
 
           {/* Rating */}
-          <div className="pf-field">
-            <label htmlFor="pf-rating" className="pf-label">Rating <span className="pf-required">*</span></label>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="rating" className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
+              Telemetry (Stars) <span className="text-[#f4a732]">*</span>
+            </label>
             <select
-              id="pf-rating"
+              id="rating"
               value={formData.rating}
               onChange={(e) => handleChange("rating", e.target.value)}
-              className="pf-input pf-select"
+              className="bg-[#181c27] border border-white/10 text-white p-3 text-sm focus:outline-none focus:ring-0 focus:border-[#f4a732] rounded-sm transition-colors appearance-none cursor-pointer"
               required
             >
-              <option value={5}>⭐⭐⭐⭐⭐ 5 Stars</option>
-              <option value={4}>⭐⭐⭐⭐ 4 Stars</option>
-              <option value={3}>⭐⭐⭐ 3 Stars</option>
-              <option value={2}>⭐⭐ 2 Stars</option>
-              <option value={1}>⭐ 1 Star</option>
+              <option value={5}>5.0 - Optimal</option>
+              <option value={4}>4.0 - Standard</option>
+              <option value={3}>3.0 - Acceptable</option>
+              <option value={2}>2.0 - Degraded</option>
+              <option value={1}>1.0 - Critical</option>
             </select>
           </div>
 
           {/* Review Count */}
-          <div className="pf-field">
-            <label htmlFor="pf-reviewCount" className="pf-label">Review Count <span className="pf-required">*</span></label>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="reviewCount" className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
+              Data Points (Count) <span className="text-[#f4a732]">*</span>
+            </label>
             <input
-              id="pf-reviewCount"
+              id="reviewCount"
               type="number"
               value={formData.reviewCount}
               onChange={(e) => handleChange("reviewCount", e.target.value)}
               min="0"
-              className="pf-input"
+              className="bg-[#181c27] border border-white/10 text-white p-3 text-sm font-mono focus:outline-none focus:ring-0 focus:border-[#f4a732] rounded-sm transition-colors"
               required
             />
           </div>
 
           {/* Badge */}
-          <div className="pf-field">
-            <label htmlFor="pf-badge" className="pf-label">Badge</label>
+          <div className="flex flex-col gap-2 md:col-span-2">
+            <label htmlFor="badge" className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
+              Override Tag
+            </label>
             <input
-              id="pf-badge"
+              id="badge"
               type="text"
               value={formData.badge}
               onChange={(e) => handleChange("badge", e.target.value)}
-              placeholder="Best Seller, Sale…"
-              className="pf-input"
+              placeholder="BEST SELLER, NEW ARRIVAL..."
+              className="bg-[#181c27] border border-white/10 text-[#f4a732] font-black uppercase tracking-[0.15em] text-xs p-3 focus:outline-none focus:ring-0 focus:border-[#f4a732] rounded-sm transition-colors"
             />
           </div>
         </div>
 
         {/* Images */}
-        <div className="pf-field pf-field--full">
-          <label className="pf-label">Product Images <span className="pf-required">*</span></label>
+        <div className="flex flex-col gap-4 border-t border-white/5 pt-6 relative z-10 w-full overflow-hidden">
+          <label className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
+            Visual Assets <span className="text-[#f4a732]">*</span>
+          </label>
 
           <input
             ref={fileInputRef}
@@ -205,32 +222,34 @@ export function ProductForm({ product, onSave, onCancel }: ProductFormProps) {
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="pf-upload-btn"
+            className="flex items-center justify-center gap-2 border border-white/10 bg-white/[0.02] hover:bg-white/[0.05] text-white p-4 font-black text-xs uppercase tracking-widest transition-colors w-full rounded-sm"
           >
-            <Upload className="h-4 w-4" />
-            {uploading ? "Uploading…" : "Upload Images"}
+            <Upload strokeWidth={2} className="w-4 h-4 text-[#f4a732]" />
+            {uploading ? "Extracting Data..." : "Upload Asset Package"}
           </button>
 
           {/* Image previews */}
           {formData.images && (
-            <div className="pf-preview-wrap">
-              <p className="pf-preview-label">Current Images</p>
-              <div className="pf-preview-grid">
+            <div className="mt-2">
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
                 {formData.images.split(",").filter((img) => img.trim()).map((img, index) => (
-                  <div key={index} className="pf-thumb-wrap group">
+                  <div key={index} className="relative group bg-[#181c27] border border-white/10 aspect-square flex items-center justify-center overflow-hidden">
                     <img
                       src={img.trim()}
-                      alt={`Product image ${index + 1}`}
-                      className="pf-thumb-img"
+                      alt={`Asset ${index + 1}`}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <button
                       type="button"
                       onClick={() => removeImage(index)}
-                      className="pf-thumb-remove"
-                      aria-label={`Remove image ${index + 1}`}
+                      className="absolute top-1 right-1 p-1.5 bg-red-500/80 hover:bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-md"
+                      aria-label={`Remove asset ${index + 1}`}
                     >
-                      <X className="h-3 w-3" />
+                        <X strokeWidth={2} className="w-3 h-3" />
                     </button>
+                    <span className="absolute bottom-1 left-1 px-1 bg-black/80 text-[8px] font-mono text-white/50 backdrop-blur-md uppercase">
+                        [{index}]
+                    </span>
                   </div>
                 ))}
               </div>
@@ -238,27 +257,36 @@ export function ProductForm({ product, onSave, onCancel }: ProductFormProps) {
           )}
 
           {/* URL fallback */}
-          <div className="pf-field--full" style={{ marginTop: "1rem" }}>
-            <label htmlFor="pf-imageUrls" className="pf-label">Or enter image URLs (comma separated)</label>
+          <div className="flex flex-col gap-2 mt-4">
+            <label htmlFor="imageUrls" className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-500">
+              Manual Asset Links (Vector Support)
+            </label>
             <textarea
-              id="pf-imageUrls"
+              id="imageUrls"
               value={formData.images}
               onChange={(e) => handleChange("images", e.target.value)}
-              placeholder="/images/product1.jpg, /images/product2.jpg"
-              rows={2}
-              className="pf-input pf-textarea"
+              placeholder="https://database.url/01.jpg, https://database.url/02.jpg..."
+              rows={3}
+              className="bg-[#181c27] border border-white/10 text-white/70 p-3 text-xs font-mono focus:outline-none focus:ring-0 focus:border-[#f4a732] rounded-sm transition-colors resize-y scrollbar-thin overflow-auto w-full break-all"
             />
           </div>
         </div>
 
         {/* Footer actions */}
-        <div className="pf-footer">
-          <button type="button" onClick={onCancel} className="pf-btn pf-btn--cancel">
-            Cancel
+        <div className="flex flex-col sm:flex-row items-center justify-end gap-3 border-t border-white/5 pt-6 mt-4 relative z-10 w-full">
+          <button 
+            type="button" 
+            onClick={onCancel} 
+            className="w-full sm:w-auto px-6 py-3.5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/5 text-xs font-black uppercase tracking-[0.15em] transition-colors rounded-sm"
+          >
+            Abort
           </button>
-          <button type="submit" className="pf-btn pf-btn--save">
-            <Save className="h-4 w-4" />
-            {product ? "Update Product" : "Add Product"}
+          <button 
+            type="submit" 
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 bg-[#f4a732] hover:bg-[#d89128] text-black font-black text-xs uppercase tracking-[0.15em] transition-all hover:-translate-y-0.5 active:translate-y-0 shadow-[4px_4px_0_rgba(255,255,255,0.1)] border border-[#a46e1d] rounded-sm"
+          >
+            <Save strokeWidth={2} className="w-4 h-4" />
+            {product ? "Commit Configuration" : "Initialize Asset"}
           </button>
         </div>
       </form>

@@ -11,7 +11,7 @@ import { UserOrders } from "./user-orders"
 import { AuthModal } from "./auth-modal"
 import { LogOut, User as UserIcon, LogIn } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { ThemeToggle } from "./theme-toggle"
+
 import { usePathname } from "next/navigation"
 
 const navLinks = [
@@ -104,7 +104,6 @@ export function Header() {
                 sizes="(max-width: 768px) 80px, 80px"
               />
             </div>
-
           </a>
 
           {/* Desktop nav */}
@@ -153,7 +152,7 @@ export function Header() {
             )}
 
             <div className="flex items-center gap-3">
-              <ThemeToggle />
+
               <UserOrders />
               <div className="cart-container">
                 <Cart />

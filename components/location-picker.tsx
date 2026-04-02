@@ -33,11 +33,13 @@ const pinIcon = L.divIcon({
 function MapController({ 
     position, 
     setPosition, 
-    onLocationSelect 
+    onLocationSelect,
+    shouldZoom 
 }: { 
     position: Location | null; 
     setPosition: (pos: Location) => void;
     onLocationSelect: (pos: Location) => void;
+    shouldZoom?: boolean;
 }) {
     const map = useMap();
 
@@ -52,9 +54,10 @@ function MapController({
 
     useEffect(() => {
         if (position) {
-            map.flyTo([position.lat, position.lng], map.getZoom(), { animate: true });
+            const zoomLevel = shouldZoom ? 22 : map.getZoom();
+            map.flyTo([position.lat, position.lng], zoomLevel, { animate: true });
         }
-    }, [position, map]);
+    }, [position, map, shouldZoom]);
 
     return null;
 }
@@ -65,6 +68,7 @@ export default function LocationPicker({ onLocationSelect, onAddressResolve, def
     const [isResolving, setIsResolving] = useState(false);
     const [address, setAddress] = useState<string>("");
     const [errorMsg, setErrorMsg] = useState("");
+    const [shouldZoom, setShouldZoom] = useState(false);
 
     const resolveAddress = async (lat: number, lng: number) => {
         setIsResolving(true);
@@ -91,7 +95,9 @@ export default function LocationPicker({ onLocationSelect, onAddressResolve, def
     };
 
     // Initial default layout somewhere in PH (or let's say a generic center if null)
-    const initialCenter: [number, number] = defaultLocation 
+    const initialCenter: [number, number] = position 
+        ? [position.lat, position.lng] 
+        : defaultLocation 
         ? [defaultLocation.lat, defaultLocation.lng] 
         : [12.8797, 121.7740]; // Philippines Center
 
@@ -135,6 +141,17 @@ export default function LocationPicker({ onLocationSelect, onAddressResolve, def
         }
     }, []);
 
+    // Update position when defaultLocation changes (from geocoding)
+    useEffect(() => {
+        if (defaultLocation) {
+            setPosition(defaultLocation);
+            resolveAddress(defaultLocation.lat, defaultLocation.lng);
+            setShouldZoom(true); // Trigger zoom on next position update
+            // Reset zoom flag after a short delay
+            setTimeout(() => setShouldZoom(false), 1000);
+        }
+    }, [defaultLocation]);
+
     return (
         <div className="relative w-full h-[250px] rounded-xl overflow-hidden border border-border group">
             {typeof window !== "undefined" && (
@@ -163,7 +180,7 @@ export default function LocationPicker({ onLocationSelect, onAddressResolve, def
                             }}
                         />
                     )}
-                    <MapController position={position} setPosition={setPosition} onLocationSelect={handleLocationUpdate} />
+                    <MapController position={position} setPosition={setPosition} onLocationSelect={handleLocationUpdate} shouldZoom={shouldZoom} />
                 </MapContainer>
             )}
 

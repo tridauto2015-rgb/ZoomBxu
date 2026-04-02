@@ -158,7 +158,7 @@ interface Order {
     customer_name: string
     customer_phone: string
     items: any[]
-    total_price: string
+    total_price: number
     status: 'pending' | 'processing' | 'cancelled' | 'completed'
     customer_lat?: number
     customer_lng?: number
@@ -201,11 +201,59 @@ export function AdminOrders() {
     const updateStatus = async (id: string, newStatus: Order['status']) => {
         const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', id)
         if (error) {
-            toast.error("Failed to update order status")
+            console.error("Order update failed:", error.message, error.code)
+            toast.error(`Failed to update order: ${error.message || 'Server error'}`)
         } else {
             showStatusToast(newStatus)
             fetchOrders()
         }
+    }
+
+    const confirmDelivery = async (orderId: string, customerLat?: number, customerLng?: number) => {
+        if (!customerLat || !customerLng) {
+            // No customer location on file — allow manual confirmation
+            if (broadcastingOrderId === orderId && watchIdRef.current !== null) {
+                navigator.geolocation.clearWatch(watchIdRef.current)
+                setBroadcastingOrderId(null)
+            }
+            updateStatus(orderId, 'completed')
+            return
+        }
+
+        if (!navigator.geolocation) {
+            toast.error("Geolocation not supported. Cannot verify proximity.")
+            return
+        }
+
+        const loadToast = toast.loading("Verifying your proximity to customer...", { position: 'top-center' })
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                toast.dismiss(loadToast)
+                const { latitude: lat, longitude: lng } = position.coords
+                const dist = calculateDistance(lat, lng, customerLat, customerLng)
+                const distMeters = Math.round(dist * 1000)
+
+                if (distMeters <= 30) {
+                    // Within 30m — allow confirmation
+                    if (broadcastingOrderId === orderId && watchIdRef.current !== null) {
+                        navigator.geolocation.clearWatch(watchIdRef.current)
+                        setBroadcastingOrderId(null)
+                    }
+                    updateStatus(orderId, 'completed')
+                } else {
+                    toast.error(`Proximity Alert: ${distMeters >= 1000 ? (dist).toFixed(1) + ' km' : distMeters + 'm'} away.`, {
+                        description: `You must be within 30 meters of the customer to confirm delivery. Currently too far.`,
+                        duration: 6000
+                    })
+                }
+            },
+            (error) => {
+                toast.dismiss(loadToast)
+                toast.error("Could not verify your location. Ensure GPS/location is enabled.")
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        )
     }
 
     const deleteOrder = async (id: string) => {
@@ -251,16 +299,23 @@ export function AdminOrders() {
             async (position) => {
                 const { latitude: lat, longitude: lng } = position.coords
                 
-                await supabase.from('order_tracking').upsert({
+                const { error } = await supabase.from('order_tracking').upsert({
                     order_id: orderId,
                     lat,
                     lng,
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'order_id' })
+
+                if (error) console.error("Tracking Upsert Error:", error)
             },
             (error) => {
                 console.error("GPS Watch Error:", error)
-                toast.error("Failed to retrieve GPS location. Ensure location permissions are granted.")
+                let msg = "Failed to retrieve GPS location."
+                if (error.code === error.PERMISSION_DENIED) msg = "Location permission denied."
+                else if (error.code === error.TIMEOUT) msg = "GPS hardware timed out."
+                
+                toast.error(msg, { description: "Ensure location permissions are granted and GPS is active." })
+                
                 if (watchIdRef.current !== null) {
                     navigator.geolocation.clearWatch(watchIdRef.current)
                     watchIdRef.current = null
@@ -270,7 +325,7 @@ export function AdminOrders() {
             {
                 enableHighAccuracy: true,
                 maximumAge: 0,
-                timeout: 10000 // Require fresh location
+                timeout: 20000 // Increased timeout for better lock
             }
         )
     }
@@ -281,25 +336,31 @@ export function AdminOrders() {
             return
         }
 
-        const loadToast = toast.loading("Acquiring GPS hardware lock...", { position: 'top-center' })
+        const loadToast = toast.loading("Acquiring your location...", { position: 'top-center' })
 
         navigator.geolocation.getCurrentPosition(
             async (position) => {
                 toast.dismiss(loadToast)
                 const { latitude: lat, longitude: lng } = position.coords
-                
-                // 1. Save initial real location immediately
-                await supabase.from('order_tracking').upsert({
+
+                // 1. Save initial location for live tracking
+                const { error: trackError } = await supabase.from('order_tracking').upsert({
                     order_id: orderId,
                     lat,
                     lng,
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'order_id' })
 
-                // 2. Set to processing only after GPS succeeds
+                if (trackError) {
+                    console.error("Tracking save failed:", trackError.message)
+                    toast.error(`Could not save location: ${trackError.message}`)
+                }
+
+                // 2. Set order to processing
                 const { error } = await supabase.from('orders').update({ status: 'processing' }).eq('id', orderId)
                 if (error) {
-                    toast.error("Failed to update order status")
+                    console.error("Order status update failed:", error.message)
+                    toast.error(`Failed to start delivery: ${error.message || 'Server error'}`)
                     return
                 }
                 
@@ -444,7 +505,7 @@ export function AdminOrders() {
                                     <div className="flex flex-col gap-5 lg:hidden animate-in slide-in-from-top-4 duration-500">
                                         <div className="flex justify-between items-start">
                                             <div className="space-y-2">
-                                                <h3 className="font-black text-2xl leading-none font-russo-one italic text-white tracking-tight flex items-center gap-3">
+                                                <h3 className="font-medium text-2xl leading-none text-white tracking-tight flex items-center gap-3">
                                                     {order.customer_name}
                                                     {isBroadcasting && <span className="flex h-2.5 w-2.5 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]"></span></span>}
                                                 </h3>
@@ -481,7 +542,7 @@ export function AdminOrders() {
                                         <div className="col-span-1 text-[10px] font-black font-mono text-muted-foreground/60 uppercase tracking-tighter">
                                             {formatTime(order.created_at)}
                                         </div>
-                                        <div className="col-span-1 font-black text-lg flex items-center gap-2 tracking-tight text-white">
+                                        <div className="col-span-1 font-medium text-lg flex items-center gap-2 tracking-tight text-white">
                                             {order.customer_name}
                                             {isBroadcasting && <span className="flex h-2.5 w-2.5 relative shrink-0"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span></span>}
                                         </div>
@@ -660,13 +721,7 @@ export function AdminOrders() {
                                                             {order.status === 'processing' && (
                                                                 <button
                                                                     className="col-span-2 relative h-14 overflow-hidden rounded-2xl bg-emerald-500 text-black font-black text-xs uppercase tracking-[0.2em] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-[0_10px_20px_-5px_rgba(16,185,129,0.4)] group/btn"
-                                                                    onClick={() => {
-                                                                        if (broadcastingOrderId === order.id && watchIdRef.current !== null) {
-                                                                            navigator.geolocation.clearWatch(watchIdRef.current)
-                                                                            setBroadcastingOrderId(null)
-                                                                        }
-                                                                        updateStatus(order.id, 'completed')
-                                                                    }}
+                                                                    onClick={() => confirmDelivery(order.id, order.customer_lat, order.customer_lng)}
                                                                 >
                                                                     <div className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300" />
                                                                     <div className="relative flex items-center justify-center gap-3">

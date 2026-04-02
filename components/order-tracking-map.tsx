@@ -187,7 +187,7 @@ export default function OrderTrackingMap({ orderId, customerLocation }: OrderTra
                   <div className="h-2 w-2 rounded-full bg-primary animate-ping absolute inset-0" />
                   <div className="h-2 w-2 rounded-full bg-primary relative" />
               </div>
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/90">Initializing Telemetry...</span>
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/90">Acquiring GPS Satellite Lock...</span>
           </div>
       )}
       
